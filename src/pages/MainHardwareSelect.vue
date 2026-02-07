@@ -9,7 +9,6 @@ let versions = ref([]);
 let vendors = ref([]);
 let radios = ref([]);
 let targets = ref([]);
-let luaUrl = ref(null);
 let hasUrlParams = ref(false);
 
 function setTargetFromParams() {
@@ -122,16 +121,6 @@ watchPostEffect(() => {
   if (!keepTarget) store.target = null
 })
 
-watch([() => store.version, () => store.firmware], () => {
-  let file = 'elrs.lua'
-  versions.value.forEach(item => {
-    console.log(item)
-    if (item.value === store.version && item.title < '4.0.0') {
-      file = 'elrsV3.lua'
-    }
-  })
-  luaUrl = store.version ? `./assets/${store.firmware}/${store.version}/lua/${file}` : null
-})
 
 watch(() => store.target, (v, _oldValue) => {
   if (v) {
@@ -156,8 +145,5 @@ watch(() => store.target, (v, _oldValue) => {
              :disabled="!store.vendor || hasUrlParams"/>
     <VAutocomplete :items="targets" v-model="store.target" density="compact" label="Hardware Target"
              :disabled="!store.version || hasUrlParams"/>
-    <a :href="luaUrl" download>
-      <VBtn :disabled="!luaUrl">Download ELRS Lua Script</VBtn>
-    </a>
   </VContainer>
 </template>
