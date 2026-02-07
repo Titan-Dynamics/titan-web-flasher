@@ -5,10 +5,63 @@ set -e
 GITHUB_REPO="wvarty/TitanLRS"
 GITHUB_BACKPACK_REPO="wvarty/TitanLRS-Backpack"
 
-# Version to download (required; pass as argument)
-VERSION="${1:?Usage: ./get_artifacts.sh <firmware-version> [backpack-version]}"
-# Backpack version can be different from main firmware
-BACKPACK_VERSION="${2:-${VERSION}}"
+fetch_all_release_versions() {
+  local repo="$1"
+  local page=1
+  local tags
+  while :; do
+    tags=$(curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}" |
+      sed -n 's/^[[:space:]]*"tag_name": "\(.*\)",/\1/p') || return 1
+    if [ -z "${tags}" ]; then
+      break
+    fi
+    printf '%s\n' "${tags}"
+    page=$((page + 1))
+  done | sed 's/^v//'
+}
+
+write_index_json() {
+  local output_path="$1"
+  shift
+  local versions=("$@")
+  {
+    echo "{"
+    echo "  \"tags\": {"
+    local first=1
+    local version
+    for version in "${versions[@]}"; do
+      if [ ${first} -eq 0 ]; then
+        echo ","
+      fi
+      printf "    \"%s\": \"%s\"" "${version}" "${version}"
+      first=0
+    done
+    echo ""
+    echo "  },"
+    echo "  \"branches\": {}"
+    echo "}"
+  } > "${output_path}"
+}
+
+FIRMWARE_VERSIONS=$(fetch_all_release_versions "${GITHUB_REPO}") || {
+  echo "❌ Error: Failed to fetch firmware releases"
+  exit 1
+}
+
+if [ -z "${FIRMWARE_VERSIONS}" ]; then
+  echo "❌ Error: No firmware releases found"
+  exit 1
+fi
+
+BACKPACK_VERSIONS=$(fetch_all_release_versions "${GITHUB_BACKPACK_REPO}") || {
+  echo "❌ Error: Failed to fetch backpack releases"
+  exit 1
+}
+
+if [ -z "${BACKPACK_VERSIONS}" ]; then
+  echo "❌ Error: No backpack releases found"
+  exit 1
+fi
 
 # Directories
 ASSETS_DIR="public/assets"
@@ -18,8 +71,8 @@ echo "================================================"
 echo "  TitanLRS Firmware Downloader"
 echo "================================================"
 echo "Repository: ${GITHUB_REPO}"
-echo "Version: ${VERSION}"
-echo "Backpack Version: ${BACKPACK_VERSION}"
+echo "Firmware releases: ${GITHUB_REPO}"
+echo "Backpack releases: ${GITHUB_BACKPACK_REPO}"
 echo ""
 
 # Create directory structure
@@ -34,45 +87,44 @@ rm -rf firmware backpack
 mkdir -p firmware
 cd firmware
 
-# Construct GitHub Release URL
-FIRMWARE_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/firmware-${VERSION}.zip"
+echo "📥 Downloading TitanLRS firmware releases..."
+readarray -t firmware_versions <<< "${FIRMWARE_VERSIONS}"
+for version in "${firmware_versions[@]}"; do
+  FIRMWARE_URL="https://github.com/${GITHUB_REPO}/releases/download/v${version}/firmware-${version}.zip"
+  echo "URL: ${FIRMWARE_URL}"
 
-echo "📥 Downloading TitanLRS firmware..."
-echo "URL: ${FIRMWARE_URL}"
-echo ""
+  curl -L -f "${FIRMWARE_URL}" -o firmware.zip || {
+    echo ""
+    echo "❌ Error: Failed to download firmware version ${version}"
+    echo ""
+    echo "Troubleshooting:"
+    echo "1. Check version exists at: https://github.com/${GITHUB_REPO}/releases"
+    echo "2. Verify version format (e.g., 'x.y.z' not 'vx.y.z')"
+    echo "3. Ensure release is published (not draft)"
+    echo ""
+    exit 1
+  }
 
-# Download firmware
-curl -L -f "${FIRMWARE_URL}" -o firmware.zip || {
-  echo ""
-  echo "❌ Error: Failed to download firmware version ${VERSION}"
-  echo ""
-  echo "Troubleshooting:"
-  echo "1. Check version exists at: https://github.com/${GITHUB_REPO}/releases"
-  echo "2. Verify version format (e.g., '4.0.0-TD' not 'v4.0.0-TD')"
-  echo "3. Ensure release is published (not draft)"
-  echo ""
-  exit 1
-}
+  # Extract firmware into version-specific directory
+  echo "📦 Extracting firmware ${version}..."
+  mkdir -p "${version}"
+  cd "${version}"
+  unzip -q ../firmware.zip
 
-# Extract firmware into version-specific directory
-echo "📦 Extracting firmware..."
-mkdir -p "${VERSION}"
-cd "${VERSION}"
-unzip -q ../firmware.zip
+  # Handle nested firmware directory if it exists
+  if [ -d "firmware-${version}" ]; then
+    echo "Moving firmware-${version} contents..."
+    shopt -s dotglob 2>/dev/null || true  # Enable hidden files in bash
+    mv firmware-${version}/* . 2>/dev/null || cp -r firmware-${version}/* . && rm -rf firmware-${version}
+  elif [ -d "firmware" ]; then
+    echo "Moving firmware contents..."
+    shopt -s dotglob 2>/dev/null || true
+    mv firmware/* . 2>/dev/null || cp -r firmware/* . && rm -rf firmware
+  fi
 
-# Handle nested firmware directory if it exists
-if [ -d "firmware-${VERSION}" ]; then
-  echo "Moving firmware-${VERSION} contents..."
-  shopt -s dotglob 2>/dev/null || true  # Enable hidden files in bash
-  mv firmware-${VERSION}/* . 2>/dev/null || cp -r firmware-${VERSION}/* . && rm -rf firmware-${VERSION}
-elif [ -d "firmware" ]; then
-  echo "Moving firmware contents..."
-  shopt -s dotglob 2>/dev/null || true
-  mv firmware/* . 2>/dev/null || cp -r firmware/* . && rm -rf firmware
-fi
-
-cd ..
-rm firmware.zip
+  cd ..
+  rm firmware.zip
+done
 
 # Download hardware definitions from master branch
 echo "📥 Downloading hardware definitions..."
@@ -82,9 +134,10 @@ HARDWARE_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/master/src/hardwa
 curl -L -f "${HARDWARE_URL}" -o targets.json || {
   echo "⚠️  Warning: Could not download targets.json from master branch"
   echo "Using targets.json from firmware archive if available..."
-  if [ -f "../${VERSION}/hardware/targets.json" ]; then
-    cp "../${VERSION}/hardware/targets.json" .
-    echo "✓ Using targets.json from firmware ${VERSION}"
+  first_version="${firmware_versions[0]}"
+  if [ -f "../${first_version}/hardware/targets.json" ]; then
+    cp "../${first_version}/hardware/targets.json" .
+    echo "✓ Using targets.json from firmware ${first_version}"
   else
     echo "❌ Error: No targets.json found"
     exit 1
@@ -95,39 +148,42 @@ cd ..
 
 # Create index.json for the web flasher to discover versions
 echo "📝 Creating index.json..."
-cat > index.json << EOF
-{
-  "tags": {
-    "${VERSION}": "${VERSION}"
-  },
-  "branches": {}
-}
-EOF
+write_index_json index.json "${firmware_versions[@]}"
 
 cd ..
 
 # Download TitanLRS Backpack firmware
 echo ""
-echo "📥 Downloading TitanLRS Backpack firmware..."
-BACKPACK_URL="https://github.com/${GITHUB_BACKPACK_REPO}/releases/download/v${BACKPACK_VERSION}/backpack-${BACKPACK_VERSION}.zip"
-echo "URL: ${BACKPACK_URL}"
-
+echo "📥 Downloading TitanLRS Backpack firmware releases..."
 mkdir -p backpack
 cd backpack
 
-curl -L -f "${BACKPACK_URL}" -o backpack.zip && {
-  echo "📦 Extracting backpack firmware..."
+readarray -t backpack_versions <<< "${BACKPACK_VERSIONS}"
+for version in "${backpack_versions[@]}"; do
+  BACKPACK_URL="https://github.com/${GITHUB_BACKPACK_REPO}/releases/download/v${version}/backpack-${version}.zip"
+  echo "URL: ${BACKPACK_URL}"
 
-  # Create version-specific directory
-  mkdir -p "${BACKPACK_VERSION}"
-  cd "${BACKPACK_VERSION}"
+  curl -L -f "${BACKPACK_URL}" -o backpack.zip || {
+    echo ""
+    echo "❌ Error: Failed to download backpack version ${version}"
+    echo ""
+    echo "Troubleshooting:"
+    echo "1. Check version exists at: https://github.com/${GITHUB_BACKPACK_REPO}/releases"
+    echo "2. Verify version format (e.g., 'x.y.z' not 'vx.y.z')"
+    echo "3. Ensure release is published (not draft)"
+    echo ""
+    exit 1
+  }
+
+  echo "📦 Extracting backpack firmware ${version}..."
+  mkdir -p "${version}"
+  cd "${version}"
   unzip -q ../backpack.zip
 
-  # Handle nested backpack directory if it exists
-  if [ -d "backpack-${BACKPACK_VERSION}" ]; then
-    echo "Moving backpack-${BACKPACK_VERSION} contents..."
+  if [ -d "backpack-${version}" ]; then
+    echo "Moving backpack-${version} contents..."
     shopt -s dotglob 2>/dev/null || true  # Enable hidden files in bash
-    mv backpack-${BACKPACK_VERSION}/* . 2>/dev/null || cp -r backpack-${BACKPACK_VERSION}/* . && rm -rf backpack-${BACKPACK_VERSION}
+    mv backpack-${version}/* . 2>/dev/null || cp -r backpack-${version}/* . && rm -rf backpack-${version}
   elif [ -d "backpack" ]; then
     echo "Moving backpack contents..."
     shopt -s dotglob 2>/dev/null || true
@@ -136,54 +192,25 @@ curl -L -f "${BACKPACK_URL}" -o backpack.zip && {
 
   cd ..
   rm backpack.zip
+done
 
-  # Create backpack index.json with the downloaded version
-  cat > index.json << EOF
-{
-  "tags": {
-    "${BACKPACK_VERSION}": "${BACKPACK_VERSION}"
-  },
-  "branches": {}
-}
-EOF
-
-  echo "✅ Backpack firmware downloaded successfully!"
-
-} || {
-  echo "⚠️  Warning: Backpack firmware not available for version ${BACKPACK_VERSION}"
-  echo "   This is normal if backpack hasn't been released yet."
-  echo "   Continuing without backpack firmware..."
-
-  # Create empty backpack structure as fallback
-  cat > index.json << EOF
-{
-  "tags": {},
-  "branches": {}
-}
-EOF
-}
+write_index_json index.json "${backpack_versions[@]}"
 
 cd ..
 
 echo ""
-echo "✅ Firmware ${VERSION} downloaded successfully!"
+echo "✅ Firmware downloads completed successfully!"
 echo "📂 Location: ${FIRMWARE_DIR}/"
 echo ""
 
 # Show directory structure
 echo "Directory structure:"
-if [ -d "${FIRMWARE_DIR}/${VERSION}" ]; then
+if [ -n "${firmware_versions[0]}" ] && [ -d "${FIRMWARE_DIR}/${firmware_versions[0]}" ]; then
   echo "firmware/"
-  echo "├── ${VERSION}/"
-  ls "${FIRMWARE_DIR}/${VERSION}" | head -10 | sed 's/^/│   ├── /'
+  echo "├── ${firmware_versions[0]}/"
+  ls "${FIRMWARE_DIR}/${firmware_versions[0]}" | head -10 | sed 's/^/│   ├── /'
   echo "├── hardware/"
   echo "│   └── targets.json"
-
-  if [ -d "backpack/${BACKPACK_VERSION}" ]; then
-    echo "└── backpack/"
-    echo "    └── ${BACKPACK_VERSION}/"
-    ls "backpack/${BACKPACK_VERSION}" | head -10 | sed 's/^/        ├── /'
-  fi
 fi
 
 echo ""
