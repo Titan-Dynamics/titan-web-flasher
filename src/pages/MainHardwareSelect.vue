@@ -4,7 +4,6 @@ import {store} from '../js/state';
 import {compareSemanticVersions} from '../js/version';
 
 let firmware = ref(null);
-let flashBranch = ref(false);
 let hardware = ref(null);
 let versions = ref([]);
 let vendors = ref([]);
@@ -38,30 +37,18 @@ function updateVersions() {
     hardware.value = null
     store.version = null
     versions.value = []
-    if (flashBranch.value) {
-      Object.entries(firmware.value.branches).forEach(([key, value]) => {
-        versions.value.push({title: key, value: value})
-        if (!store.version) store.version = value
-      })
-      Object.entries(firmware.value.tags).forEach(([key, value]) => {
-        if (key.indexOf('-') !== -1) versions.value.push({title: key, value: value})
-      })
-      versions.value = versions.value.sort((a, b) => a.title.localeCompare(b.title))
-    } else {
-      let first = true;
-      Object.keys(firmware.value.tags).sort(compareSemanticVersions).reverse().forEach((key) => {
-        if (key.indexOf('-') === -1 || first) {
-          versions.value.push({title: key, value: firmware.value.tags[key]})
-          if (!store.version && key.indexOf('-') === -1) store.version = firmware.value.tags[key]
-          first = false
-        }
-      })
-    }
+    let first = true;
+    Object.keys(firmware.value.tags).sort(compareSemanticVersions).reverse().forEach((key) => {
+      if (key.indexOf('-') === -1 || first) {
+        versions.value.push({title: key, value: firmware.value.tags[key]})
+        if (!store.version && key.indexOf('-') === -1) store.version = firmware.value.tags[key]
+        first = false
+      }
+    })
   }
 }
 
 watch(firmware, updateVersions)
-watch(flashBranch, updateVersions)
 
 watchPostEffect(() => {
   if (store.version) {
@@ -118,7 +105,7 @@ watchPostEffect(() => {
         for (const [rk, r] of Object.entries(v)) {
           if (rk.startsWith(store.targetType) && (rk === store.radio || store.radio === null)) {
             for (const [ck, c] of Object.entries(r)) {
-              if (flashBranch.value || compareSemanticVersions(version, c.min_version) >= 0) {
+              if (compareSemanticVersions(version, c.min_version) >= 0) {
                 targets.value.push({title: c.product_name, value: {vendor: vk, radio: rk, target: ck, config: c}})
                 if (store.target && store.target.vendor === vk && store.target.radio === rk && store.target.target === ck) {
                   store.target.config = c
@@ -153,16 +140,9 @@ watch(() => store.target, (v, _oldValue) => {
   }
 })
 
-function flashType() {
-  return flashBranch.value ? 'Branches' : 'Releases'
-}
 </script>
 
 <template>
-  <VRow justify="end">
-    <VSwitch v-model="flashBranch" :label="flashType()" color="secondary"/>
-  </VRow>
-
   <VContainer max-width="600px">
     <VCardTitle>Hardware Selection</VCardTitle>
     <VCardText>Choose the vendor specific hardware that you are flashing, if the hardware is not in the list then the
