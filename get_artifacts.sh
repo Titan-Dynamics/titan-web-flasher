@@ -5,12 +5,17 @@ set -e
 GITHUB_REPO="wvarty/TitanLRS"
 GITHUB_BACKPACK_REPO="wvarty/TitanLRS-Backpack"
 
+github_api_get() {
+  local url="$1"
+  curl -fsSL "${url}"
+}
+
 fetch_all_release_versions() {
   local repo="$1"
   local page=1
   local tags
   while :; do
-    tags=$(curl -fsSL "https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}" |
+    tags=$(github_api_get "https://api.github.com/repos/${repo}/releases?per_page=100&page=${page}" |
       sed -n 's/^[[:space:]]*"tag_name": "\(.*\)",/\1/p') || return 1
     if [ -z "${tags}" ]; then
       break
@@ -43,24 +48,31 @@ write_index_json() {
   } > "${output_path}"
 }
 
-FIRMWARE_VERSIONS=$(fetch_all_release_versions "${GITHUB_REPO}") || {
-  echo "❌ Error: Failed to fetch firmware releases"
-  exit 1
-}
+REQUESTED_VERSION="$1"
 
-if [ -z "${FIRMWARE_VERSIONS}" ]; then
-  echo "❌ Error: No firmware releases found"
-  exit 1
-fi
+if [ -n "${REQUESTED_VERSION}" ]; then
+  FIRMWARE_VERSIONS="${REQUESTED_VERSION}"
+  BACKPACK_VERSIONS="${REQUESTED_VERSION}"
+else
+  FIRMWARE_VERSIONS=$(fetch_all_release_versions "${GITHUB_REPO}") || {
+    echo "❌ Error: Failed to fetch firmware releases"
+    exit 1
+  }
 
-BACKPACK_VERSIONS=$(fetch_all_release_versions "${GITHUB_BACKPACK_REPO}") || {
-  echo "❌ Error: Failed to fetch backpack releases"
-  exit 1
-}
+  if [ -z "${FIRMWARE_VERSIONS}" ]; then
+    echo "❌ Error: No firmware releases found"
+    exit 1
+  fi
 
-if [ -z "${BACKPACK_VERSIONS}" ]; then
-  echo "❌ Error: No backpack releases found"
-  exit 1
+  BACKPACK_VERSIONS=$(fetch_all_release_versions "${GITHUB_BACKPACK_REPO}") || {
+    echo "❌ Error: Failed to fetch backpack releases"
+    exit 1
+  }
+
+  if [ -z "${BACKPACK_VERSIONS}" ]; then
+    echo "❌ Error: No backpack releases found"
+    exit 1
+  fi
 fi
 
 # Directories
