@@ -23,15 +23,15 @@ function setFirmware(firmware, targetType) {
       <div class="containerHeader">
         <VCardTitle>Main Firmware</VCardTitle>
       </div>
-      <VRow class="firmware-row firmware-options">
-        <VCol md="12">
+      <VRow class="firmware-row firmware-options" no-gutters>
+        <VCol cols="12" md="12">
         <HoverCard min-height="100%" @click="setFirmware('firmware', 'tx')"
                     :image="controllerIcon" :hover-image="controllerIcon"
                     title="Transmitter"
                     text="Install or update the main TitanLRS firmware on any compatible Transmitter module.
                     Internal and external modules supported."/>
         </VCol>
-        <VCol md="12">
+        <VCol cols="12" md="12">
         <HoverCard min-height="100%" @click="setFirmware('firmware', 'rx')"
                     :image="radioIcon" :hover-image="radioIcon"
                     title="Receiver"
@@ -44,14 +44,14 @@ function setFirmware(firmware, targetType) {
       <div class="containerHeader">
         <VCardTitle>Backpack Firmware</VCardTitle>
       </div>
-      <VRow class="firmware-row firmware-options">
-        <VCol md="12">
+      <VRow class="firmware-row firmware-options" no-gutters>
+        <VCol cols="12" md="12">
         <HoverCard min-height="100%" @click="setFirmware('backpack', 'txbp')"
                     :image="moduleIcon" :hover-image="moduleIcon"
                     title="Transmitter Backpack"
                     text="Install or update the firmware on the secondary Backpack module inside the Transmitter."/>
         </VCol>
-        <VCol md="12">
+        <VCol cols="12" md="12">
         <HoverCard min-height="100%" @click="setFirmware('backpack', 'vrx')"
                     :image="vrxIcon" :hover-image="vrxIcon"
                     title="Backpack Receiver"
@@ -120,9 +120,8 @@ function setFirmware(firmware, targetType) {
 .firmware-group :deep(.firmware-options) {
   width: 100%;
   height: 266px;
-  margin-left: 0;
-  margin-right: 0;
-  row-gap: 16px;
+  margin: 0;
+  row-gap: 12px;
 }
 
 .firmware-group :deep(.firmware-options > .v-col) {
@@ -140,6 +139,22 @@ function setFirmware(firmware, targetType) {
   .firmware-group {
     width: min(500px, 100%);
     height: auto;
+  }
+
+  .firmware-group :deep(.v-row) {
+    height: auto;
+    align-content: flex-start;
+  }
+
+  .firmware-group :deep(.firmware-options) {
+    height: auto;
+    row-gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .firmware-group :deep(.firmware-options) {
+    row-gap: 12px;
   }
 }
 </style>

@@ -1,4 +1,6 @@
 <script setup>
+import {computed} from 'vue';
+import {useDisplay} from 'vuetify';
 import {resetState, store} from './js/state';
 
 import FirmwareSelect from './pages/FirmwareSelect.vue';
@@ -15,6 +17,9 @@ import STLinkFlash from "./pages/STLinkFlash.vue";
 
 import ReloadPrompt from './components/ReloadPrompt.vue';
 import logoUrl from './assets/brand/td-full-logo-white.png';
+
+const {mobile} = useDisplay();
+const appBarHeight = computed(() => (mobile.value ? 170 : 320));
 
 function stepPrev() {
   if (store.currentStep === 1) {
@@ -51,13 +56,12 @@ store.options.flashMethod = urlParams.get('method');
   <VApp class="td-app">
     <VLayout>
       <ReloadPrompt />
-      <VAppBar height="320" class="td-app-bar" flat>
+      <VAppBar :height="appBarHeight" class="td-app-bar" flat>
         <div class="td-app-bar__content td-app-bar__content--stack">
           <div class="td-brand">
             <img class="td-logo" :src="logoUrl" alt="Titan Dynamics" />
           </div>
           <div class="td-title__sub">TitanLRS Web Flasher</div>
-          <div class="td-build">Git: @GITHASH@</div>
         </div>
       </VAppBar>
       <VMain class="td-main">
@@ -93,6 +97,7 @@ store.options.flashMethod = urlParams.get('method');
               </div>
             </VContainer>
           </VFadeTransition>
+          <div class="td-build">Git: @GITHASH@</div>
         </div>
       </VMain>
     </VLayout>
@@ -121,14 +126,14 @@ store.options.flashMethod = urlParams.get('method');
 }
 
 .td-logo {
-  width: 673px;
-  height: 150px;
+  width: 336px;
+  height: 75px;
   max-width: 100%;
   object-fit: contain;
 }
 
 .td-title__sub {
-  font-size: 36px;
+  font-size: 27px;
   font-weight: 400;
   color: #ffffff;
   letter-spacing: 0.05em;
@@ -142,20 +147,31 @@ store.options.flashMethod = urlParams.get('method');
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: center;
-  margin-top: -16px;
+  margin-top: 24px;
 }
 
 @media (max-width: 960px) {
   .td-logo {
-    max-height: 96px;
+    max-height: 48px;
   }
 
   .td-title__sub {
-    font-size: 22px;
+    font-size: 27px;
   }
 
   .td-build {
-    margin-top: 4px;
+    margin-top: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .td-app-bar__content {
+    gap: 6px;
+    padding: 8px 12px 0 12px;
+  }
+
+  .td-title__sub {
+    font-size: 17px;
   }
 }
 </style>

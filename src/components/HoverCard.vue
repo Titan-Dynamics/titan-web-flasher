@@ -41,8 +41,8 @@ defineProps(['image', 'hoverImage', 'title', 'text'])
 .option-card {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 20px;
+  gap: 16px;
+  padding: 16px;
 }
 
 .option-icon {
@@ -50,6 +50,11 @@ defineProps(['image', 'hoverImage', 'title', 'text'])
   width: 56px;
   height: 56px;
   flex: 0 0 56px;
+}
+
+.option-icon img {
+  width: 56px;
+  height: 56px;
 }
 
 .option-content {
@@ -74,6 +79,35 @@ defineProps(['image', 'hoverImage', 'title', 'text'])
   font-size: 13px;
   line-height: 1.5;
   color: #9ca3af;
+}
+
+@media (max-width: 640px) {
+  .default-card {
+    height: auto;
+  }
+
+  .option-card {
+    gap: 12px;
+    padding: 16px;
+    align-items: flex-start;
+  }
+
+  .option-icon {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+  }
+
+  .option-icon img {
+    width: 44px;
+    height: 44px;
+  }
+
+  .option-content {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+  }
 }
 
 </style>

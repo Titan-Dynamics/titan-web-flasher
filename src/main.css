@@ -129,7 +129,12 @@ body {
         padding: 20px;
     }
 
+    .td-main {
+        padding: 4px 0 48px 0;
+    }
+
     .section {
-        margin-top: -60px;
+        margin-top: 0;
+        gap: 10px;
     }
 }
