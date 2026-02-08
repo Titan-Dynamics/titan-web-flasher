@@ -9,7 +9,6 @@ Based on the official [ExpressLRS Web Flasher](https://github.com/ExpressLRS/web
 - UART (Receivers do not need to be in bootloader mode)
 - Betaflight passthrough
 - EdgeTX passthrough
-- STLink
 
 ## Developing and Testing Locally
 
@@ -18,22 +17,17 @@ Based on the official [ExpressLRS Web Flasher](https://github.com/ExpressLRS/web
 Download TitanLRS firmware from GitHub Releases:
 
 ```bash
-./get_artifacts.sh 4.0.0-TD
+./get_artifacts.sh
 ```
 
-To download a specific version, pass it as an argument:
+To download a specific version (used for both firmware and backpack), pass it as an argument:
 
 ```bash
 ./get_artifacts.sh <version>
 ```
 
-If the backpack release uses a different version than the main firmware, pass it as a second argument:
-
-```bash
-./get_artifacts.sh <firmware-version> <backpack-version>
-```
-
-Available versions: https://github.com/wvarty/TitanLRS/releases
+Available firmware versions: https://github.com/Titan-Dynamics/TitanLRS/releases
+Available backpack versions: https://github.com/Titan-Dynamics/TitanLRS-Backpack/releases
 
 ### 2. Install Dependencies
 
@@ -77,8 +71,9 @@ public/assets/
 
 ## Repository Information
 
-- **Web Flasher Fork**: https://github.com/wvarty/web-flasher
-- **Firmware Source**: https://github.com/wvarty/TitanLRS/releases
+- **Web Flasher Fork**: https://github.com/Titan-Dynamics/web-flasher
+- **Firmware Source**: https://github.com/Titan-Dynamics/TitanLRS/releases
+- **Backpack Source**: https://github.com/Titan-Dynamics/TitanLRS-Backpack/releases
 - **Upstream**: https://github.com/ExpressLRS/web-flasher
 
 ## License

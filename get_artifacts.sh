@@ -2,8 +2,8 @@
 set -e
 
 # TitanLRS Configuration
-GITHUB_REPO="wvarty/TitanLRS"
-GITHUB_BACKPACK_REPO="wvarty/TitanLRS-Backpack"
+GITHUB_REPO="Titan-Dynamics/TitanLRS"
+GITHUB_BACKPACK_REPO="Titan-Dynamics/TitanLRS-Backpack"
 
 github_api_get() {
   local url="$1"
