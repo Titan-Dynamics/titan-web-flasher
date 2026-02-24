@@ -7,8 +7,8 @@
 
 const TARGET_REPOS = [
   // Order matters: later entries override earlier ones on conflict.
-  // wvarty (custom TD targets) is the base, ELRS overwrites matching keys.
-  'https://raw.githubusercontent.com/wvarty/targets/master/targets.json',
+  // Titan-Dynamics (custom TD targets) is the base, ELRS overwrites matching keys.
+  'https://raw.githubusercontent.com/Titan-Dynamics/targets/master/targets.json',
   'https://raw.githubusercontent.com/ExpressLRS/targets/master/targets.json',
 ]
 
@@ -70,13 +70,13 @@ export function repoNameFromUrl(url) {
 /**
  * Base URLs for the targets repos (without targets.json).
  * Used to fetch layout files (TX/*.json, RX/*.json) and logo files.
- * Order matches TARGET_REPOS: wvarty first, then ELRS.
+ * Order matches TARGET_REPOS: Titan-Dynamics first, then ELRS.
  */
 export const TARGET_REPO_BASE_URLS = TARGET_REPOS.map(url => url.replace('/targets.json', ''))
 
 /**
  * Attempt to fetch a hardware file (layout or logo) from the GitHub targets repos.
- * Tries each repo in reverse order (ELRS first, then wvarty) so that the
+ * Tries each repo in reverse order (ELRS first, then Titan-Dynamics) so that the
  * higher-priority repo's file is preferred.
  *
  * @param {string} path - relative path within the targets repo, e.g. "TX/Radiomaster Nomad.json"
