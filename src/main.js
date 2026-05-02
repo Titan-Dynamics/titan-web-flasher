@@ -5,6 +5,7 @@ import {createApp} from 'vue'
 import {createVuetify} from 'vuetify'
 import * as vertical from 'vuetify/labs/VStepperVertical'
 
+import './assets/td.css'
 import './main.css'
 import App from './App.vue'
 
@@ -16,14 +17,15 @@ const vuetify = createVuetify({
             titanDark: {
                 dark: true,
                 colors: {
-                    background: '#0A0A0A',
-                    surface: '#1A1A1A',
-                    primary: '#FA8423',
-                    secondary: '#B8860B',
-                    info: '#9CA3AF',
-                    success: '#FA8423',
-                    warning: '#B8860B',
-                    error: '#FA8423'
+                    background: '#0A0B0D',
+                    surface: '#15171A',
+                    'surface-variant': '#1D2024',
+                    primary: '#F26B1F',
+                    secondary: '#C9551A',
+                    info: '#5B9DF6',
+                    success: '#4FC78F',
+                    warning: '#E5A53B',
+                    error: '#E8624C'
                 }
             }
         }
@@ -35,6 +37,18 @@ const vuetify = createVuetify({
         VBtn: {
             density: "default",
             color: "primary"
+        },
+        VSelect: {
+            variant: "outlined"
+        },
+        VAutocomplete: {
+            variant: "outlined"
+        },
+        VTextField: {
+            variant: "outlined"
+        },
+        VTextarea: {
+            variant: "outlined"
         }
     }
 })

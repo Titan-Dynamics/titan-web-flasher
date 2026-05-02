@@ -1,16 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-
-:root {
-    --td-primary: #FA8423;
-    --td-border: #FA8423;
-    --td-bg: #0A0A0A;
-    --td-card-bg: #1F1F1F;
-    --td-option-bg: #1F1F1F;
-    --td-text: #FFFFFF;
-    --td-text-muted: #9CA3AF;
-    --td-text-dark: #111827;
-    --td-border-light: #E5E7EB;
-}
+/* ── TitanLRS Web Flasher — global styles ────────────────
+   Tokens come from td.css (imported before this file).
+   This file themes Vuetify to match the TitanLRS DS.
+   ─────────────────────────────────────────────────────── */
 
 html, body, #app {
     height: auto;
@@ -19,35 +10,37 @@ html, body, #app {
 }
 
 body {
-    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background: var(--td-bg);
-    color: var(--td-text);
+    font-family: var(--td-font);
+    font-size: var(--td-fs-md);
+    background: var(--td-bg-0);
+    color: var(--td-fg);
     margin: 0;
     overflow-y: auto;
+    -webkit-font-smoothing: antialiased;
 }
 
+/* ── Vuetify app shell ──────────────────────────────────── */
 .v-application,
 .v-application__wrap {
     min-height: 100vh;
     height: auto;
     overflow-x: hidden;
     overflow-y: visible;
+    background: var(--td-bg-0) !important;
+    font-family: var(--td-font) !important;
 }
 
 .td-main {
     padding: 48px 0 80px 0;
 }
 
-.v-application {
-    background: var(--td-bg);
-}
-
+/* ── Layout containers ──────────────────────────────────── */
 .containerMain {
     z-index: 10;
-    border: 2px solid var(--td-border);
-    background: transparent;
+    border: 1px solid var(--td-line);
+    background: var(--td-bg-1);
     padding: 32px;
-    border-radius: 12px;
+    border-radius: var(--td-r-lg);
     box-shadow: none;
 }
 
@@ -58,22 +51,23 @@ body {
 
 .containerMain .v-card-title {
     padding: 0;
-    font-size: 24px;
+    font-size: var(--td-fs-xl);
     font-weight: 600;
-    color: var(--td-text);
-    letter-spacing: 0.02em;
+    color: var(--td-fg);
+    letter-spacing: -0.01em;
 }
 
 .containerMain .v-card-subtitle {
     padding: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--td-text-muted);
+    font-size: var(--td-fs-md);
+    font-weight: 400;
+    color: var(--td-fg-mute);
 }
 
 .containerMain .v-card-text {
-    font-size: 13px;
-    color: var(--td-text-muted);
+    font-size: var(--td-fs-md);
+    color: var(--td-fg-mute);
+    padding: 0;
 }
 
 .section {
@@ -85,32 +79,163 @@ body {
     z-index: 20;
 }
 
+/* ── Vuetify form fields (outlined variant) ─────────────── */
 .v-field {
-    border-radius: 8px;
+    border-radius: var(--td-r-md) !important;
+    font-family: var(--td-font) !important;
+}
+
+/* Remove the underline/bottom-bar decoration entirely */
+.v-field__underline,
+.v-field--variant-underlined .v-field__underline,
+.v-field--variant-filled .v-field__underline {
+    display: none !important;
 }
 
 .v-field__input,
 .v-label,
-.v-select__selection {
-    color: var(--td-text) !important;
+.v-select__selection,
+.v-autocomplete__selection {
+    color: var(--td-fg) !important;
+    font-family: var(--td-font) !important;
+    font-size: var(--td-fs-md) !important;
 }
 
-.v-field__outline {
-    color: #3a3a3a !important;
+/* Hide Vuetify's 3-segment outline overlay entirely — we draw our own border */
+.v-field--variant-outlined .v-field__outline {
+    display: none !important;
 }
 
-.v-field--focused .v-field__outline {
-    color: var(--td-primary) !important;
+/* Single border on the field element — resting */
+.v-field--variant-outlined {
+    border: 1px solid var(--td-line-2) !important;
+    border-radius: var(--td-r-md) !important;
 }
 
+/* hover */
+.v-field--variant-outlined:hover {
+    border-color: var(--td-line-3) !important;
+}
+
+/* focused */
+.v-field--variant-outlined.v-field--focused {
+    border-color: var(--td-brand) !important;
+    box-shadow: 0 0 0 3px var(--td-brand-soft) !important;
+}
+
+/* Input background */
+.v-field--variant-outlined,
+.v-text-field .v-field,
+.v-select .v-field,
+.v-autocomplete .v-field {
+    background: var(--td-bg-2) !important;
+}
+
+.v-field__overlay {
+    background: transparent !important;
+}
+
+/* Floating label — sits in notch above border when active/filled */
+.v-label.v-field-label {
+    color: var(--td-fg-dim) !important;
+    font-size: var(--td-fs-md) !important;
+    font-family: var(--td-font) !important;
+}
+
+.v-label.v-field-label--floating {
+    color: var(--td-fg-dim) !important;
+    font-size: var(--td-fs-xs) !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.02em !important;
+}
+
+/* ── Vuetify dropdown / list ────────────────────────────── */
+.v-overlay__content .v-list,
+.v-menu__content .v-list {
+    background: var(--td-bg-2) !important;
+    border: 1px solid var(--td-line-2) !important;
+    border-radius: var(--td-r-md) !important;
+    box-shadow: var(--td-shadow-2) !important;
+}
+
+.v-list-item {
+    font-family: var(--td-font) !important;
+    font-size: var(--td-fs-md) !important;
+    color: var(--td-fg) !important;
+    min-height: var(--td-h-row) !important;
+}
+
+.v-list-item:hover > .v-list-item__overlay {
+    opacity: 0.08 !important;
+}
+
+.v-list-item--active {
+    color: var(--td-brand) !important;
+}
+
+.v-list-item--active > .v-list-item__overlay {
+    background: var(--td-brand-soft) !important;
+    opacity: 1 !important;
+}
+
+.v-list-item-title {
+    font-size: var(--td-fs-md) !important;
+    color: var(--td-fg) !important;
+}
+
+/* ── Vuetify buttons ────────────────────────────────────── */
 .v-btn {
     text-transform: none !important;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-weight: 500 !important;
+    letter-spacing: 0 !important;
+    font-family: var(--td-font) !important;
+    font-size: var(--td-fs-md) !important;
+    border-radius: var(--td-r-md) !important;
+    transition: background var(--td-dur) var(--td-ease), border-color var(--td-dur) var(--td-ease) !important;
 }
 
+/* ── Vuetify stepper ────────────────────────────────────── */
 .v-stepper {
     background: transparent !important;
+    box-shadow: none !important;
+}
+
+.v-stepper-header {
+    background: transparent !important;
+    border-bottom: 1px solid var(--td-line) !important;
+    box-shadow: none !important;
+}
+
+.v-stepper-item__title {
+    font-family: var(--td-font) !important;
+    font-size: var(--td-fs-md) !important;
+    font-weight: 500 !important;
+    color: var(--td-fg-mute) !important;
+}
+
+.v-stepper-item--selected .v-stepper-item__title {
+    color: var(--td-fg) !important;
+    font-weight: 600 !important;
+}
+
+.v-stepper-item__avatar.v-avatar {
+    background: var(--td-bg-3) !important;
+    border: 1px solid var(--td-line-2) !important;
+    color: var(--td-fg-dim) !important;
+    font-size: var(--td-fs-sm) !important;
+    font-family: var(--td-mono) !important;
+}
+
+.v-stepper-item--selected .v-stepper-item__avatar.v-avatar {
+    background: var(--td-brand) !important;
+    border-color: var(--td-brand) !important;
+    color: #fff !important;
+}
+
+.v-stepper-item--complete .v-stepper-item__avatar.v-avatar {
+    background: var(--td-ok-soft) !important;
+    border-color: var(--td-ok) !important;
+    color: var(--td-ok) !important;
 }
 
 .v-stepper-window {
@@ -118,6 +243,27 @@ body {
     margin: 0 !important;
 }
 
+/* Stepper actions row */
+.v-stepper-actions {
+    border-top: 1px solid var(--td-line) !important;
+    padding: 12px 16px !important;
+}
+
+/* ── Vuetify snackbar ───────────────────────────────────── */
+.v-snackbar__content {
+    font-family: var(--td-font) !important;
+    font-size: var(--td-fs-md) !important;
+}
+
+/* ── Vuetify card (used inside pages) ───────────────────── */
+.v-card {
+    background: var(--td-bg-2) !important;
+    border: 1px solid var(--td-line) !important;
+    box-shadow: none !important;
+    border-radius: var(--td-r-lg) !important;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 960px) {
     .containerMain {
         padding: 24px;
@@ -139,6 +285,46 @@ body {
     }
 }
 
+/* ── Form row layout (shared across all wizard pages) ─────── */
+.hw-select {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.hw-select-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: var(--td-s-4);
+    margin-bottom: var(--td-s-2);
+    border-bottom: 1px solid var(--td-line);
+}
+
+.hw-row {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    align-items: center;
+    gap: var(--td-s-4);
+    padding: var(--td-s-3) 0;
+    border-bottom: 1px solid var(--td-line);
+}
+
+/* Auto-remove bottom border from the last hw-row in a section */
+.hw-row:not(:has(~ .hw-row)) {
+    border-bottom: none;
+}
+
+.hw-row--align-top {
+    align-items: start;
+}
+
+.hw-label {
+    font-size: var(--td-fs-md);
+    color: var(--td-fg-mute);
+    white-space: nowrap;
+}
+
+/* ── Utility ────────────────────────────────────────────── */
 .td-error-snackbar {
     width: min(560px, calc(100vw - 16px)) !important;
     max-width: min(560px, calc(100vw - 16px)) !important;
@@ -159,8 +345,10 @@ body {
 .td-flash-log-line {
     display: block;
     max-width: 100%;
-    font-size: 0.9rem;
-    line-height: 1.3;
+    font-family: var(--td-mono);
+    font-size: var(--td-fs-sm);
+    line-height: 1.4;
+    color: var(--td-fg-mute);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;

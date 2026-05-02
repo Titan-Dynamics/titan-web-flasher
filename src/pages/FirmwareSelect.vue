@@ -83,18 +83,18 @@ function setFirmware(firmware, targetType) {
 <style scoped>
 .v-card-title {
   padding: 0;
-  font-size: 24px;
+  font-size: var(--td-fs-xl);
   font-weight: 600;
-  line-height: 28.8px;
-  color: #fa8423;
-  letter-spacing: 0;
+  line-height: var(--td-lh-xl);
+  color: var(--td-brand);
+  letter-spacing: -0.01em;
 }
 
 .v-card-subtitle {
   padding: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #9ca3af;
+  font-size: var(--td-fs-md);
+  font-weight: 400;
+  color: var(--td-fg-mute);
 }
 
 .firmware-grid {

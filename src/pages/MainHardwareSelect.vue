@@ -14,6 +14,8 @@ let hasUrlParams = ref(false);
 let urlTargetResolved = ref(false);
 let fetchFailed = ref(false);
 let fetchFailedMessage = ref('');
+let quickSearch = ref(null);
+let quickSearchItems = ref([]);
 
 function setTargetFromParams() {
   if (urlTargetResolved.value) return;
@@ -49,6 +51,7 @@ function updateVersions() {
     hardware.value = null
     store.version = null
     versions.value = []
+    const savedVersion = localStorage.getItem(`titan-last-version-${store.firmware}`)
     let first = true;
     Object.keys(firmware.value.tags).sort(compareSemanticVersions).reverse().forEach((key) => {
       if (key.indexOf('-') === -1 || first) {
@@ -57,10 +60,16 @@ function updateVersions() {
         first = false
       }
     })
+    if (savedVersion) {
+      const found = versions.value.find(v => v.value === savedVersion)
+      if (found) store.version = found.value
+    }
   }
 }
 
 watch(firmware, updateVersions)
+
+watch(() => store.version, v => { if (v) localStorage.setItem(`titan-last-version-${store.firmware}`, v) })
 
 function buildVendorList(hardwareData) {
   const list = []
@@ -151,37 +160,100 @@ watchPostEffect(() => {
 })
 
 
+watchPostEffect(() => {
+  quickSearchItems.value = []
+  if (store.version && hardware.value) {
+    const versionEntry = versions.value.find(x => x.value === store.version)
+    const version = versionEntry?.title
+    for (const [vk, v] of Object.entries(hardware.value)) {
+      const vendorName = v.name || vk
+      for (const [rk, r] of Object.entries(v)) {
+        if (!rk.startsWith(store.targetType)) continue
+        const radioLabel = radioTitles[rk] || rk
+        for (const [ck, c] of Object.entries(r)) {
+          if (!version || compareSemanticVersions(version, c.min_version) >= 0) {
+            quickSearchItems.value.push({
+              title: `${c.product_name} (${radioLabel})`,
+              value: { vendor: vk, radio: rk, target: ck, config: c }
+            })
+          }
+        }
+      }
+    }
+    quickSearchItems.value.sort((a, b) => a.title.localeCompare(b.title))
+  }
+})
+
+watch(quickSearch, (v) => {
+  if (v) {
+    store.vendor = v.vendor
+    store.radio = v.radio
+    store.target = v
+  }
+})
+
+function onQuickSearchClear() {
+  store.vendor = null
+  store.radio = null
+  store.target = null
+}
+
 watch(() => store.target, (v, _oldValue) => {
   if (v) {
     store.vendor = v.vendor
     store.radio = v.radio
+  } else {
+    quickSearch.value = null
   }
 })
 
 </script>
 
 <template>
-  <VContainer max-width="600px">
-    <VCardTitle>Hardware Selection</VCardTitle>
-    <VCardText>Choose the vendor specific hardware that you are flashing, if the hardware is not in the list then the
-      hardware is unsupported.
-    </VCardText>
-    <br>
-    <VSelect :items="versions" v-model="store.version" density="compact" label="Firmware Version"/>
-    <VSelect :items="vendors" v-model="store.vendor" density="compact" label="Hardware Vendor"
-             :disabled="!store.version || hasUrlParams"/>
-    <VSelect :items="radios" v-model="store.radio" density="compact" label="Radio Frequency"
-             :disabled="!store.vendor || hasUrlParams"/>
-    <VAutocomplete :items="targets" v-model="store.target" density="compact" label="Hardware Target"
-             :disabled="!store.version || hasUrlParams"/>
+  <div class="hw-select">
+    <div class="hw-select-title">
+      <span class="td-h4">Hardware Selection</span>
+      <span class="td-small td-dim">Choose the vendor specific hardware that you are flashing</span>
+    </div>
+    <div class="hw-row">
+      <span class="hw-label">Firmware Version</span>
+      <VSelect :items="versions" v-model="store.version" hide-details/>
+    </div>
+    <div class="hw-row">
+      <span class="hw-label">Quick Search</span>
+      <VAutocomplete
+        :items="quickSearchItems"
+        v-model="quickSearch"
+        placeholder="Device name, vendor, or frequency band…"
+        clearable
+        :disabled="!hardware || hasUrlParams"
+        @click:clear="onQuickSearchClear"
+        :menu-props="{ maxWidth: 'min-content', minWidth: '100%' }"
+        hide-details
+      />
+    </div>
+    <div class="hw-row">
+      <span class="hw-label">Hardware Vendor</span>
+      <VSelect :items="vendors" v-model="store.vendor" :disabled="!store.version || hasUrlParams" hide-details/>
+    </div>
+    <div class="hw-row">
+      <span class="hw-label">Radio Frequency</span>
+      <VSelect :items="radios" v-model="store.radio" :disabled="!store.vendor || hasUrlParams" hide-details/>
+    </div>
+    <div class="hw-row hw-row--last">
+      <span class="hw-label">Hardware Target</span>
+      <VAutocomplete :items="targets" v-model="store.target" :disabled="!store.version || hasUrlParams" hide-details/>
+    </div>
+  </div>
 
-    <VSnackbar v-model="fetchFailed" vertical color="red-darken-3" content-class="td-error-snackbar">
-      <div class="text-subtitle-1 pb-2">Targets Fetch Failed</div>
-
-      <p>{{ fetchFailedMessage }}</p>
-      <template v-slot:actions>
-        <VBtn variant="text" color="white" @click="fetchFailed = false">✕</VBtn>
-      </template>
-    </VSnackbar>
-  </VContainer>
+  <VSnackbar v-model="fetchFailed" vertical color="red-darken-3" content-class="td-error-snackbar">
+    <div class="text-subtitle-1 pb-2">Targets Fetch Failed</div>
+    <p>{{ fetchFailedMessage }}</p>
+    <template v-slot:actions>
+      <VBtn variant="text" color="white" @click="fetchFailed = false">✕</VBtn>
+    </template>
+  </VSnackbar>
 </template>
+
+<style scoped>
+</style>

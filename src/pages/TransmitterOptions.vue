@@ -9,26 +9,25 @@ import TXOptions from "../components/TXOptions.vue";
 </script>
 
 <template>
-  <VContainer max-width="600px">
-    <VCardTitle>Transmitter Options</VCardTitle>
-    <VCardText>Set the flashing options and method for your <b>{{ store.target?.config?.product_name }}</b></VCardText>
-    <br>
+  <div class="hw-select">
+    <div class="hw-select-title">
+      <span class="td-h4">Transmitter Options</span>
+      <span class="td-small td-dim">Set the flashing options and method for your <b>{{ store.target?.config?.product_name }}</b></span>
+    </div>
     <VForm autocomplete="on" method="POST">
       <BindPhraseInput v-model="store.options.uid"/>
       <RFSelect v-model:region="store.options.region" v-model:domain="store.options.domain" :radio="store.radio"/>
       <WiFiSettingsInput v-model:ssid="store.options.ssid" v-model:password="store.options.password"
                          v-if="store.target?.config?.platform!=='stm32'"/>
-
       <FlashMethodSelect v-model="store.options.flashMethod" :methods="store.target?.config?.upload_methods"/>
-
-      <VExpansionPanels variant="popout">
-        <VExpansionPanel title="Advanced Settings">
-          <VExpansionPanelText>
-            <WiFiAutoOn v-model="store.options.wifiOnInternal"/>
-            <TXOptions/>
-          </VExpansionPanelText>
-        </VExpansionPanel>
-      </VExpansionPanels>
     </VForm>
-  </VContainer>
+    <VExpansionPanels variant="popout">
+      <VExpansionPanel title="Advanced Settings">
+        <VExpansionPanelText>
+          <WiFiAutoOn v-model="store.options.wifiOnInternal"/>
+          <TXOptions/>
+        </VExpansionPanelText>
+      </VExpansionPanel>
+    </VExpansionPanels>
+  </div>
 </template>

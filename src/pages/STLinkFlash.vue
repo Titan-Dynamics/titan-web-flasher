@@ -162,11 +162,11 @@ async function flash() {
 </script>
 
 <template>
-  <VContainer max-width="600px">
-    <VCardTitle>Flash Firmware File(s)</VCardTitle>
-    <VCardText>The firmware file(s) have been configured for your <b>{{ store.target?.config?.product_name }}</b> with
-      the specified options.
-    </VCardText>
+  <div class="hw-select">
+    <div class="hw-select-title">
+      <span class="td-h4">Flash Firmware File(s)</span>
+      <span class="td-small td-dim">The firmware file(s) have been configured for your <b>{{ store.target?.config?.product_name }}</b> with the specified options.</span>
+    </div>
 
     <VStepperVertical v-model="step" :hide-actions="true" flat>
       <VStepperVerticalItem title="Connect to serial UART" value="1" :hide-actions="true" :complete="step > 1"
@@ -234,5 +234,5 @@ async function flash() {
         <VBtn variant="text" color="white" @click="fetchFailed = false">✕</VBtn>
       </template>
     </VSnackbar>
-  </VContainer>
+  </div>
 </template>

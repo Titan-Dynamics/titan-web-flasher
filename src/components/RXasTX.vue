@@ -13,6 +13,24 @@ let items = ref([
 </script>
 
 <template>
-  <VCheckbox v-model="enabled" :label="'Flash RX as TX' + (store.target.config.platform.startsWith('esp32') ? '' : ' (full-duplex internal module only)')"/>
-  <VSelect v-model="type" :items="items" v-if="store.target.config.platform.startsWith('esp32') && enabled"/>
+  <div class="hw-row">
+    <div>
+      <span class="hw-label">Flash RX as TX</span>
+      <span class="hw-note" v-if="!store.target.config.platform.startsWith('esp32')">full-duplex internal module only</span>
+    </div>
+    <VCheckbox v-model="enabled" hide-details density="compact"/>
+  </div>
+  <div class="hw-row" v-if="store.target.config.platform.startsWith('esp32') && enabled">
+    <span class="hw-label">RX Mode</span>
+    <VSelect v-model="type" :items="items" hide-details/>
+  </div>
 </template>
+
+<style scoped>
+.hw-note {
+  display: block;
+  font-size: var(--td-fs-xs);
+  color: var(--td-fg-dim);
+  margin-top: 1px;
+}
+</style>
