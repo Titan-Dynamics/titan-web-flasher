@@ -12,6 +12,8 @@ let vendors = ref([]);
 let targets = ref([]);
 let fetchFailed = ref(false)
 let fetchFailedMessage = ref('')
+let quickSearch = ref(null);
+let quickSearchItems = ref([]);
 
 watchPostEffect(() => {
   fetch(`./assets/${store.firmware}/index.json`).then(r => r.json()).then(r => {
@@ -95,10 +97,41 @@ watchEffect(() => {
   if (!keepTarget) store.target = null
 })
 
-watch(() => store.target, (v, _oldValue) => {
+watchEffect(() => {
+  quickSearchItems.value = []
+  if (store.version && hardware.value) {
+    for (const [vk, v] of Object.entries(hardware.value)) {
+      if (!v[store.targetType]) continue
+      const vendorName = v.name || vk
+      for (const [ck, c] of Object.entries(v[store.targetType])) {
+        quickSearchItems.value.push({
+          title: `${vendorName} \u2013 ${c.product_name}`,
+          value: { vendor: vk, target: ck, config: c }
+        })
+      }
+    }
+    quickSearchItems.value.sort((a, b) => a.title.localeCompare(b.title))
+  }
+})
+
+watch(quickSearch, (v) => {
+  if (v) {
+    store.vendor = v.vendor
+    store.target = v
+  }
+})
+
+function onQuickSearchClear() {
+  store.vendor = null
+  store.target = null
+}
+
+watch(() => store.target, (v) => {
   if (v) {
     store.vendor = v.vendor
     store.vendor_name = hardware.value[v.vendor].name
+  } else {
+    quickSearch.value = null
   }
 })
 
@@ -124,6 +157,17 @@ watch(() => store.target, (v, _oldValue) => {
     </template>
     <br>
     <VSelect :items="versions" v-model="store.version" label="Firmware Version"/>
+    <VAutocomplete
+      :items="quickSearchItems"
+      v-model="quickSearch"
+      label="Quick Search"
+      placeholder="Type a device name or vendor&hellip;"
+      clearable
+      :disabled="!hardware"
+      @click:clear="onQuickSearchClear"
+      :menu-props="{ maxWidth: 'min-content', minWidth: '100%' }"
+    />
+    <br>
     <VSelect :items="vendors" v-model="store.vendor" :label="vendorLabel" :disabled="!store.version"/>
     <VAutocomplete :items="targets" v-model="store.target" label="Hardware Target" :disabled="!store.vendor"/>
 

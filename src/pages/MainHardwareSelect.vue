@@ -14,6 +14,8 @@ let hasUrlParams = ref(false);
 let urlTargetResolved = ref(false);
 let fetchFailed = ref(false);
 let fetchFailedMessage = ref('');
+let quickSearch = ref(null);
+let quickSearchItems = ref([]);
 
 function setTargetFromParams() {
   if (urlTargetResolved.value) return;
@@ -151,10 +153,50 @@ watchPostEffect(() => {
 })
 
 
+watchPostEffect(() => {
+  quickSearchItems.value = []
+  if (store.version && hardware.value) {
+    const versionEntry = versions.value.find(x => x.value === store.version)
+    const version = versionEntry?.title
+    for (const [vk, v] of Object.entries(hardware.value)) {
+      const vendorName = v.name || vk
+      for (const [rk, r] of Object.entries(v)) {
+        if (!rk.startsWith(store.targetType)) continue
+        const radioLabel = radioTitles[rk] || rk
+        for (const [ck, c] of Object.entries(r)) {
+          if (!version || compareSemanticVersions(version, c.min_version) >= 0) {
+            quickSearchItems.value.push({
+              title: `${vendorName} \u2013 ${c.product_name} (${radioLabel})`,
+              value: { vendor: vk, radio: rk, target: ck, config: c }
+            })
+          }
+        }
+      }
+    }
+    quickSearchItems.value.sort((a, b) => a.title.localeCompare(b.title))
+  }
+})
+
+watch(quickSearch, (v) => {
+  if (v) {
+    store.vendor = v.vendor
+    store.radio = v.radio
+    store.target = v
+  }
+})
+
+function onQuickSearchClear() {
+  store.vendor = null
+  store.radio = null
+  store.target = null
+}
+
 watch(() => store.target, (v, _oldValue) => {
   if (v) {
     store.vendor = v.vendor
     store.radio = v.radio
+  } else {
+    quickSearch.value = null
   }
 })
 
@@ -168,6 +210,18 @@ watch(() => store.target, (v, _oldValue) => {
     </VCardText>
     <br>
     <VSelect :items="versions" v-model="store.version" density="compact" label="Firmware Version"/>
+    <VAutocomplete
+      :items="quickSearchItems"
+      v-model="quickSearch"
+      density="compact"
+      label="Quick Search"
+      placeholder="Type a device name, vendor, or frequency band&hellip;"
+      clearable
+      :disabled="!hardware || hasUrlParams"
+      @click:clear="onQuickSearchClear"
+      :menu-props="{ maxWidth: 'min-content', minWidth: '100%' }"
+    />
+    <br>
     <VSelect :items="vendors" v-model="store.vendor" density="compact" label="Hardware Vendor"
              :disabled="!store.version || hasUrlParams"/>
     <VSelect :items="radios" v-model="store.radio" density="compact" label="Radio Frequency"
