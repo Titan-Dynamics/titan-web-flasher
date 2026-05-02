@@ -83,33 +83,32 @@ async function downloadFirmware() {
 </script>
 
 <template>
-  <VContainer max-width="600px">
-    <VCardTitle>Download Firmware File(s)</VCardTitle>
-    <VCardText>The firmware file(s) have been configured for your <b>{{ store.target?.config?.product_name }}</b> with
-      the specified options.
-      <br/>
+  <div class="hw-select">
+    <div class="hw-select-title">
+      <span class="td-h4">Download Firmware File(s)</span>
+      <span class="td-small td-dim">The firmware file(s) have been configured for your <b>{{ store.target?.config?.product_name }}</b> with the specified options.</span>
+    </div>
+    <p class="td-body td-mute" style="margin: 0 0 var(--td-s-3)">
       To flash the firmware file to your device, put it into WiFi mode and connect to it via the browser
       then upload the <b>firmware.bin{{ store.target.config.platform === 'esp8285' ? '.gz' : '' }}</b> file on the
       <b>Update</b> tab.
-    </VCardText>
-    <VCardText v-if="store.target.config.platform === 'esp8285'">
+    </p>
+    <p class="td-body td-mute" style="margin: 0 0 var(--td-s-3)" v-if="store.target.config.platform === 'esp8285'">
       The firmware file <b>firmware.bin.gz</b> should be flashed as-is, do NOT decompress or unzip the file or you <i>will</i>
       receive an error.
-    </VCardText>
-    <VCardText v-else-if="zipped">
+    </p>
+    <p class="td-body td-mute" style="margin: 0 0 var(--td-s-3)" v-else-if="zipped">
       The firmware files are contained in the <b>firmware.zip</b> file and should be extracted before being uploaded to
       the device for flashing.
-    </VCardText>
-    <br>
+    </p>
     <VBtn color="primary" @click="downloadFirmware()">Download</VBtn>
 
     <VSnackbar v-model="fetchFailed" vertical color="red-darken-3" content-class="td-error-snackbar">
       <div class="text-subtitle-1 pb-2">Firmware Fetch Failed</div>
-
       <p>{{ fetchFailedMessage }}</p>
       <template v-slot:actions>
         <VBtn variant="text" color="white" @click="fetchFailed = false">✕</VBtn>
       </template>
     </VSnackbar>
-  </VContainer>
+  </div>
 </template>

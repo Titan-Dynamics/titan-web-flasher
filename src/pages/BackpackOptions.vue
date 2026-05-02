@@ -23,15 +23,15 @@ watchEffect(() => {
 </script>
 
 <template>
-  <VContainer max-width="600px">
-    <VCardTitle>Backpack Options</VCardTitle>
-    <VCardText>Set the flashing options and method for your <b>{{ store.name }}</b></VCardText>
-    <br>
+  <div class="hw-select">
+    <div class="hw-select-title">
+      <span class="td-h4">Backpack Options</span>
+      <span class="td-small td-dim">Set the flashing options and method for your <b>{{ store.name }}</b></span>
+    </div>
     <BindPhraseInput v-model="store.options.uid"/>
     <WiFiSettingsInput v-model:ssid="store.options.ssid" v-model:password="store.options.password"
                        v-if="store.target?.config?.platform!=='stm32'"/>
     <WiFiAutoOn v-model="store.options.wifiOnInternal"/>
-
     <FlashMethodSelect v-model="store.options.flashMethod" :methods="store.target?.config?.upload_methods"/>
-  </VContainer>
+  </div>
 </template>

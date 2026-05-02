@@ -22,11 +22,11 @@ defineProps(['image', 'hoverImage', 'title', 'text'])
 
 <style scoped>
 .default-card {
-  border-radius: 8px;
-  border: none;
-  background: #1f1f1f;
-  transition: background-color 200ms ease;
-  box-shadow: none;
+  border-radius: var(--td-r-lg) !important;
+  border: 1px solid var(--td-line) !important;
+  background: var(--td-bg-2) !important;
+  transition: background var(--td-dur) var(--td-ease), border-color var(--td-dur) var(--td-ease);
+  box-shadow: none !important;
   text-align: left;
   padding: 0;
   width: 100%;
@@ -34,8 +34,9 @@ defineProps(['image', 'hoverImage', 'title', 'text'])
 }
 
 .hover-card {
-  background: #303030;
-  box-shadow: none;
+  background: var(--td-bg-3) !important;
+  border-color: var(--td-line-2) !important;
+  box-shadow: none !important;
 }
 
 .option-card {
@@ -70,15 +71,16 @@ defineProps(['image', 'hoverImage', 'title', 'text'])
   padding: 0;
   margin: 0;
   font-weight: 600;
-  font-size: 16px;
-  color: #ffffff;
+  font-size: var(--td-fs-lg);
+  color: var(--td-fg);
+  letter-spacing: -0.005em;
 }
 
 .v-card-text {
   padding: 0;
-  font-size: 13px;
+  font-size: var(--td-fs-md);
   line-height: 1.5;
-  color: #9ca3af;
+  color: var(--td-fg-mute);
 }
 
 @media (max-width: 640px) {

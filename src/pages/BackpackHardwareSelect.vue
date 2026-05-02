@@ -26,6 +26,7 @@ function updateVersions() {
     hardware.value = null
     store.version = null
     versions.value = []
+    const savedVersion = localStorage.getItem(`titan-last-version-${store.firmware}`)
     let first = true
     Object.keys(firmware.value.tags).sort(compareSemanticVersions).reverse().forEach((key) => {
       if (key.indexOf('-') === -1 || first) {
@@ -34,10 +35,16 @@ function updateVersions() {
         first = false
       }
     })
+    if (savedVersion) {
+      const found = versions.value.find(v => v.value === savedVersion)
+      if (found) store.version = found.value
+    }
   }
 }
 
 watch(firmware, updateVersions)
+
+watch(() => store.version, v => { if (v) localStorage.setItem(`titan-last-version-${store.firmware}`, v) })
 
 watchPostEffect(() => {
   if (store.version) {
@@ -105,7 +112,7 @@ watchEffect(() => {
       const vendorName = v.name || vk
       for (const [ck, c] of Object.entries(v[store.targetType])) {
         quickSearchItems.value.push({
-          title: `${vendorName} \u2013 ${c.product_name}`,
+          title: c.product_name,
           value: { vendor: vk, target: ck, config: c }
         })
       }
@@ -138,46 +145,53 @@ watch(() => store.target, (v) => {
 </script>
 
 <template>
-  <VContainer max-width="600px">
-    <template v-if="store.targetType==='txbp'">
-      <VCardTitle>Transmitter Hardware Selection</VCardTitle>
-      <VCardSubtitle>Choose the transmitter module that is having it's backpack flashed</VCardSubtitle>
-    </template>
-    <template v-if="store.targetType==='vrx'">
-      <VCardTitle>VRx Hardware Selection</VCardTitle>
-      <VCardSubtitle>Choose the video receiver type and hardware to be flashed</VCardSubtitle>
-    </template>
-    <template v-if="store.targetType==='aat'">
-      <VCardTitle>Antenna Tracker Hardware Selection</VCardTitle>
-      <VCardSubtitle>Choose the antenna tracker type and hardware to be flashed</VCardSubtitle>
-    </template>
-    <template v-if="store.targetType==='timer'">
-      <VCardTitle>Race Timer Hardware Selection</VCardTitle>
-      <VCardSubtitle>Choose the race timer and hardware to be flashed</VCardSubtitle>
-    </template>
-    <br>
-    <VSelect :items="versions" v-model="store.version" label="Firmware Version"/>
-    <VAutocomplete
-      :items="quickSearchItems"
-      v-model="quickSearch"
-      label="Quick Search"
-      placeholder="Type a device name or vendor&hellip;"
-      clearable
-      :disabled="!hardware"
-      @click:clear="onQuickSearchClear"
-      :menu-props="{ maxWidth: 'min-content', minWidth: '100%' }"
-    />
-    <br>
-    <VSelect :items="vendors" v-model="store.vendor" :label="vendorLabel" :disabled="!store.version"/>
-    <VAutocomplete :items="targets" v-model="store.target" label="Hardware Target" :disabled="!store.vendor"/>
+  <div class="hw-select">
+    <div class="hw-select-title">
+      <span class="td-h4" v-if="store.targetType==='txbp'">Transmitter Backpack</span>
+      <span class="td-h4" v-else-if="store.targetType==='vrx'">VRx Hardware</span>
+      <span class="td-h4" v-else-if="store.targetType==='aat'">Antenna Tracker Hardware</span>
+      <span class="td-h4" v-else-if="store.targetType==='timer'">Race Timer Hardware</span>
+      <span class="td-small td-dim" v-if="store.targetType==='txbp'">Choose the transmitter module having its backpack flashed</span>
+      <span class="td-small td-dim" v-else-if="store.targetType==='vrx'">Choose the video receiver type and hardware to be flashed</span>
+      <span class="td-small td-dim" v-else-if="store.targetType==='aat'">Choose the antenna tracker type and hardware to be flashed</span>
+      <span class="td-small td-dim" v-else-if="store.targetType==='timer'">Choose the race timer and hardware to be flashed</span>
+    </div>
 
-    <VSnackbar v-model="fetchFailed" vertical color="red-darken-3" content-class="td-error-snackbar">
-      <div class="text-subtitle-1 pb-2">Targets Fetch Failed</div>
+    <div class="hw-row">
+      <span class="hw-label">Firmware Version</span>
+      <VSelect :items="versions" v-model="store.version" hide-details/>
+    </div>
+    <div class="hw-row">
+      <span class="hw-label">Quick Search</span>
+      <VAutocomplete
+        :items="quickSearchItems"
+        v-model="quickSearch"
+        placeholder="Device name or vendor…"
+        clearable
+        :disabled="!hardware"
+        @click:clear="onQuickSearchClear"
+        :menu-props="{ maxWidth: 'min-content', minWidth: '100%' }"
+        hide-details
+      />
+    </div>
+    <div class="hw-row">
+      <span class="hw-label">{{ vendorLabel }}</span>
+      <VSelect :items="vendors" v-model="store.vendor" :disabled="!store.version" hide-details/>
+    </div>
+    <div class="hw-row hw-row--last">
+      <span class="hw-label">Hardware Target</span>
+      <VAutocomplete :items="targets" v-model="store.target" :disabled="!store.vendor" hide-details/>
+    </div>
+  </div>
 
-      <p>{{ fetchFailedMessage }}</p>
-      <template v-slot:actions>
-        <VBtn variant="text" color="white" @click="fetchFailed = false">✕</VBtn>
-      </template>
-    </VSnackbar>
-  </VContainer>
+  <VSnackbar v-model="fetchFailed" vertical color="red-darken-3" content-class="td-error-snackbar">
+    <div class="text-subtitle-1 pb-2">Targets Fetch Failed</div>
+    <p>{{ fetchFailedMessage }}</p>
+    <template v-slot:actions>
+      <VBtn variant="text" color="white" @click="fetchFailed = false">✕</VBtn>
+    </template>
+  </VSnackbar>
 </template>
+
+<style scoped>
+</style>

@@ -122,8 +122,8 @@ store.options.flashMethod = urlParams.get('method');
 
 <style>
 .td-app-bar {
-  background: #0a0a0a !important;
-  border-bottom: 0;
+  background: var(--td-bg-0) !important;
+  border-bottom: none !important;
 }
 
 .td-app-bar__content {
@@ -149,8 +149,9 @@ store.options.flashMethod = urlParams.get('method');
 }
 
 .td-logo-button:focus-visible {
-  outline: 2px solid #ffffff;
+  outline: 2px solid var(--td-brand);
   outline-offset: 6px;
+  border-radius: var(--td-r-sm);
 }
 
 .td-logo {
@@ -161,12 +162,13 @@ store.options.flashMethod = urlParams.get('method');
 }
 
 .td-title__sub {
-  font-size: 27px;
+  font-size: 22px;
   font-weight: 400;
-  color: #ffffff;
-  letter-spacing: 0.05em;
+  color: var(--td-fg-mute);
+  letter-spacing: 0.04em;
   text-transform: none;
   text-align: center;
+  font-family: var(--td-font);
 }
 
 
@@ -176,7 +178,7 @@ store.options.flashMethod = urlParams.get('method');
   }
 
   .td-title__sub {
-    font-size: 27px;
+    font-size: 22px;
   }
 
 }
@@ -188,7 +190,7 @@ store.options.flashMethod = urlParams.get('method');
   }
 
   .td-title__sub {
-    font-size: 17px;
+    font-size: 15px;
   }
 }
 </style>
