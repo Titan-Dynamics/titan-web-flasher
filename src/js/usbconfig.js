@@ -13,7 +13,11 @@
  * html/src/utils/transport.js, so the panels copied into src/dashboard/ work unchanged.
  */
 
-export const USB_FILTER = {vendorId: 0x0483, productId: 0x5740}
+/* Must match USBD_VID / USBD_PID in TitanLRS/src/targets/common.ini. 1209:0001 is pid.codes'
+ * prototyping pair and is not shippable — see the note there. We deliberately do not use ST's
+ * generic 0483:5740 VCP pair: ST's Windows driver claims it by hardware ID, which stops Windows
+ * enumerating the device as composite and leaves the vendor interface with no driver at all. */
+export const USB_FILTER = {vendorId: 0x1209, productId: 0x0001}
 
 /* Matches lib/USBComposite: the config interface is found by class, so it survives any future
  * renumbering of the interfaces around it. */
