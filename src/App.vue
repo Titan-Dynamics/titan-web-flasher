@@ -1,5 +1,5 @@
 <script setup>
-import {computed} from 'vue';
+import {computed, defineAsyncComponent} from 'vue';
 import {useDisplay} from 'vuetify';
 import {resetState, store} from './js/state';
 
@@ -14,6 +14,9 @@ import BackpackOptions from "./pages/BackpackOptions.vue";
 import Download from "./pages/Download.vue";
 import SerialFlash from "./pages/SerialFlash.vue";
 import STLinkFlash from "./pages/STLinkFlash.vue";
+
+// Lazy so the flashing path never downloads the dashboard or its ported Lit panels.
+const DeviceDashboard = defineAsyncComponent(() => import('./pages/DeviceDashboard.vue'));
 
 import ReloadPrompt from './components/ReloadPrompt.vue';
 import logoUrl from './assets/brand/td-full-logo-white.png';
@@ -65,12 +68,23 @@ else if (store.targetType)
 
 store.options.flashMethod = urlParams.get('method');
 
+// Dev deep link into the USB config dashboard: ?dashboard&mock=tx|rx. It is mock-only on
+// purpose — a real device is opened by the Connect to Device button on the landing page,
+// because the WebUSB chooser can only be raised from a user gesture.
+if (urlParams.has('dashboard') && urlParams.has('mock')) store.view = 'dashboard';
+
 </script>
 
 <template>
   <VApp class="td-app">
-    <VLayout>
-      <ReloadPrompt />
+    <ReloadPrompt />
+    <!--
+      The Device Dashboard owns the whole page: once connected it reproduces the firmware's own
+      full-viewport shell (fixed left nav + topbar), so it must not sit inside the flasher's app
+      bar and stepper chrome. The flashing wizard below is unchanged.
+    -->
+    <DeviceDashboard v-if="store.view === 'dashboard'"/>
+    <VLayout v-else>
       <VAppBar :height="appBarHeight" class="td-app-bar" flat>
         <div class="td-app-bar__content td-app-bar__content--stack">
           <div class="td-brand">

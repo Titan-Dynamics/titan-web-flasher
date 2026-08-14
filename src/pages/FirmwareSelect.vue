@@ -1,4 +1,5 @@
 <script setup>
+import {onMounted, ref} from 'vue';
 import {store} from '../js/state';
 import HoverCard from '../components/HoverCard.vue';
 
@@ -8,6 +9,49 @@ import moduleIcon from '../assets/brand/module-icon.png';
 import vrxIcon from '../assets/brand/video-receiver-combined-icon.png';
 
 const emit = defineEmits(['onClick']);
+
+const connecting = ref(false);
+const webUsbSupported = ref(true);
+const mockParam = new URLSearchParams(window.location.search).get('mock');
+
+onMounted(async () => {
+  // Warm the chunk so the click handler below reaches requestDevice() without spending its
+  // transient user activation on a network fetch.
+  const usb = await import('../js/usbconfig.js');
+  webUsbSupported.value = usb.isWebUsbSupported() || !!mockParam;
+});
+
+/**
+ * Open the device and hand the live session to the dashboard.
+ *
+ * The WebUSB device chooser requires transient user activation, so it has to be raised from
+ * this click — which is why the session is opened here rather than after the dashboard mounts.
+ */
+async function connectDevice() {
+  if (connecting.value) return;
+  store.usbError = '';
+  connecting.value = true;
+  try {
+    const usb = await import('../js/usbconfig.js');
+    const session = mockParam
+      ? new usb.MockTransport(mockParam)
+      : new usb.UsbConfigSession();
+    // WebUSB permission persists per origin, so a device the user has granted before can be
+    // reopened without raising the chooser again.
+    const known = mockParam ? [] : await usb.getKnownDevices();
+    await session.connect(known.length === 1 ? known[0] : null);
+    store.usbSession = session;
+    store.view = 'dashboard';
+    emit('onClick');
+  } catch (err) {
+    // Dismissing the device chooser is not an error worth reporting.
+    if (!(err && err.name === 'NotFoundError')) {
+      store.usbError = (err && err.message) || String(err);
+    }
+  } finally {
+    connecting.value = false;
+  }
+}
 
 // Set firmware and targetType in state store, then update page to pages selection page
 function setFirmware(firmware, targetType) {
@@ -59,6 +103,35 @@ function setFirmware(firmware, targetType) {
         </VCol>
       </VRow>
     </div>
+    <div class="containerMain firmware-group firmware-group--wide">
+      <div class="containerHeader">
+        <VCardTitle>Device Configuration</VCardTitle>
+      </div>
+      <VAlert v-if="store.usbError" type="error" variant="tonal" class="dashboard-alert"
+              closable @click:close="store.usbError = ''">
+        {{ store.usbError }}
+      </VAlert>
+      <VAlert v-else-if="!webUsbSupported" type="warning" variant="tonal" class="dashboard-alert">
+        This browser does not support WebUSB. Use Chrome, Edge or another Chromium-based
+        browser to configure a device over USB.
+      </VAlert>
+      <VRow class="firmware-row firmware-options" no-gutters>
+        <VCol cols="12" md="12">
+          <HoverCard min-height="100%" :interactive="false"
+                     :image="moduleIcon" :hover-image="moduleIcon"
+                     title="USB Device Config"
+                     text="Connect a TitanLRS device over USB
+                     and click &quot;Connect to Device&quot; to edit the settings straight from the browser.">
+            <template #action>
+              <VBtn color="primary" size="large" :loading="connecting"
+                    :disabled="!webUsbSupported" @click="connectDevice">
+                Connect to Device
+              </VBtn>
+            </template>
+          </HoverCard>
+        </VCol>
+      </VRow>
+    </div>
   </div>
   <!--
   <VRow>
@@ -103,7 +176,6 @@ function setFirmware(firmware, targetType) {
   gap: 32px;
   justify-content: center;
   width: 1032px;
-  height: 383px;
   margin: 0 auto;
 }
 
@@ -128,6 +200,22 @@ function setFirmware(firmware, targetType) {
   padding: 0;
 }
 
+/* Full-width third cell. Must come after the .firmware-group rules above so the fixed
+   383px/266px heights of the two-card panels do not apply to this single-card one. */
+.firmware-group.firmware-group--wide {
+  grid-column: 1 / -1;
+  width: auto;
+  height: auto;
+}
+
+.firmware-group.firmware-group--wide :deep(.firmware-options) {
+  height: auto;
+}
+
+.dashboard-alert {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 960px) {
   .firmware-grid {
     grid-template-columns: 1fr;
@@ -139,6 +227,10 @@ function setFirmware(firmware, targetType) {
   .firmware-group {
     width: min(500px, 100%);
     height: auto;
+  }
+
+  .firmware-group.firmware-group--wide {
+    width: min(500px, 100%);
   }
 
   .firmware-group :deep(.v-row) {

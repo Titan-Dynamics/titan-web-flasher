@@ -2,13 +2,39 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
 import { VitePWA } from 'vite-plugin-pwa'
+import babel from 'vite-plugin-babel'
+
+// Custom-element tags defined by the ported firmware panels in src/dashboard/. Vue must leave
+// them alone. Matched by exact name (never a blanket "contains a dash" rule, which would eat
+// Vuetify's own components).
+const DASHBOARD_ELEMENTS = new Set([
+  'info-panel', 'binding-panel', 'tx-options-panel', 'rx-options-panel',
+  'buttons-panel', 'models-panel', 'connections-panel', 'serial-panel',
+  'file-drop',
+])
 
 // https://vitejs.dev/config/
 export default defineConfig({
   appType: 'mpa',
   plugins: [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => DASHBOARD_ELEMENTS.has(tag),
+        },
+      },
+    }),
     vuetify(),
+    // The ported Lit panels use 2023-05 decorators (`@customElement`, `@state() accessor`),
+    // matching the firmware web UI's own build (TitanLRS/src/html/vite.config.js).
+    babel({
+      filter: /src[\\/]dashboard[\\/].*\.js$/,
+      babelConfig: {
+        babelrc: false,
+        configFile: false,
+        plugins: [['@babel/plugin-proposal-decorators', { version: '2023-05' }]],
+      },
+    }),
     VitePWA({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
