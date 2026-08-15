@@ -24,6 +24,8 @@ const nullTransport = {
   reboot: notConnected,
   reset: notConnected,
   exportConfig: notConnected,
+  sendCrsf: notConnected,
+  onCrsf: () => () => {},
 }
 
 let current = nullTransport
@@ -54,6 +56,10 @@ export const transport = {
   reboot: (...a) => { notifyRebooting(); return current.reboot(...a) },
   reset: (...a) => { notifyRebooting(); return current.reset(...a) },
   exportConfig: (...a) => current.exportConfig(...a),
+  // The CRSF parameter tunnel. Unlike everything else here it is asynchronous in both
+  // directions: sendCrsf() is fire-and-forget and replies arrive through onCrsf().
+  sendCrsf: (...a) => (current.sendCrsf ? current.sendCrsf(...a) : notConnected()),
+  onCrsf: (cb) => (current.onCrsf ? current.onCrsf(cb) : () => {}),
 }
 
 export async function downloadExport(filename, opts = {export: true}) {

@@ -13,6 +13,9 @@
  * html/src/utils/transport.js, so the panels copied into src/dashboard/ work unchanged.
  */
 
+// Only used by MockTransport's canned parameter tree; the real transport is codec-agnostic.
+import {CRSF} from './crsf.js'
+
 /* Must match USBD_VID / USBD_PID in TitanLRS/src/targets/common.ini. 1209:0001 is pid.codes'
  * prototyping pair and is not shippable — see the note there. We deliberately do not use ST's
  * generic 0483:5740 VCP pair: ST's Windows driver claims it by hardware ID, which stops Windows
@@ -33,6 +36,7 @@ const TCFG_SET = 0x5446
 const TCFG_REBOOT = 0x5447
 const TCFG_RESET = 0x5448
 const TCFG_PING = 0x5449
+const TCFG_CRSF = 0x544A
 
 const RES_CONFIG = 0
 const RES_OPTIONS = 1
@@ -47,10 +51,12 @@ const CHUNK_LAST = 1 << 1
 export const FEATURE_OPTIONS_WRITE = 1 << 0
 export const FEATURE_CW = 1 << 1
 export const FEATURE_LR1121_UPDATE = 1 << 2
+export const FEATURE_CRSF_PARAMS = 1 << 3
 
 const FN_NAMES = {
   [TCFG_HELLO]: 'hello', [TCFG_BYE]: 'bye', [TCFG_GET]: 'get', [TCFG_SET]: 'set',
   [TCFG_REBOOT]: 'reboot', [TCFG_RESET]: 'reset', [TCFG_PING]: 'ping',
+  [TCFG_CRSF]: 'crsf',
 }
 
 const ERR_NAMES = {
@@ -131,6 +137,7 @@ export class UsbConfigSession {
     this._pending = null      // {function, resolve, reject, timer, chunks}
     this._queue = Promise.resolve()
     this._lostCbs = []
+    this._crsfCbs = []
     this._keepalive = null
     this._closing = false
   }
@@ -347,6 +354,15 @@ export class UsbConfigSession {
   }
 
   _dispatch({direction, fn, payload}) {
+    // TCFG_CRSF is the one asynchronous function: the device emits parameter frames unsolicited,
+    // with no request outstanding. It must be routed before the _pending match or an inbound
+    // frame that happens to arrive mid-request would be taken for that request's reply.
+    if (fn === TCFG_CRSF) {
+      if (direction === '>') this._crsfCbs.slice().forEach((cb) => {
+        try { cb(payload) } catch { /* a listener must not break the read loop */ }
+      })
+      return
+    }
     const p = this._pending
     if (!p || p.fn !== fn) return   // stale frame from an abandoned request
     if (direction === '!') {
@@ -476,6 +492,29 @@ export class UsbConfigSession {
     return Promise.resolve()
   }
 
+  // ---- CRSF parameter tunnel -------------------------------------------------
+  /**
+   * Push one raw CRSF frame (sync byte through CRC) at the device.
+   *
+   * Fire-and-forget: the tunnel carries somebody else's protocol, so there is no TCFG-level
+   * acknowledgement and the reply — if there is one — arrives later through onCrsf(). It skips
+   * _enqueue() deliberately: the queue exists to serialise request/response functions, and a
+   * parameter enumeration would otherwise be stuck behind (and stall) the 1 Hz keepalive.
+   */
+  sendCrsf(frameBytes) {
+    if (!this.connected) return Promise.reject(new Error('Not connected'))
+    return this._send(TCFG_CRSF, frameBytes)
+  }
+
+  /** Register a callback for inbound CRSF frames. Returns an unsubscribe, matching onLost(). */
+  onCrsf(cb) {
+    this._crsfCbs.push(cb)
+    return () => {
+      const i = this._crsfCbs.indexOf(cb)
+      if (i >= 0) this._crsfCbs.splice(i, 1)
+    }
+  }
+
   reboot() {
     return this._enqueue(() => this._request(TCFG_REBOOT)).then(() => {})
   }
@@ -492,6 +531,72 @@ export class UsbConfigSession {
 // Fixtures mirror TitanLRS/src/html/dev-mock-plugin.js, minus the ESP-only bits an STM32
 // device never reports (no ssid, mode is "USB", no pwm array, no serial1-protocol).
 // ---------------------------------------------------------------------------------------
+/*
+ * A canned CRSF parameter tree, so the Parameters tab is developable without hardware. Shaped
+ * like a real ELRS TX tree: a couple of selections at the root, a folder, a command and an info
+ * field, which between them exercise every control the panel renders.
+ */
+const MOCK_PARAMS = [
+  null,
+  {number: 1, parent: 0, type: CRSF.PARAM_TYPE_TEXT_SELECTION, name: 'Packet Rate', value: 3,
+   options: ['50Hz', '100Hz Full', '150Hz', '250Hz', '500Hz'], unit: ''},
+  {number: 2, parent: 0, type: CRSF.PARAM_TYPE_TEXT_SELECTION, name: 'Telem Ratio', value: 0,
+   options: ['Std', 'Off', '1:128', '1:64', '1:32', '1:16', '1:8', '1:4', '1:2', 'Race'], unit: ''},
+  {number: 3, parent: 0, type: CRSF.PARAM_TYPE_TEXT_SELECTION, name: 'Switch Mode', value: 1,
+   options: ['Wide', 'Hybrid', '16ch Rate/2'], unit: ''},
+  {number: 4, parent: 0, type: CRSF.PARAM_TYPE_FOLDER, name: 'TX Power'},
+  {number: 5, parent: 4, type: CRSF.PARAM_TYPE_TEXT_SELECTION, name: 'Max Power', value: 2,
+   options: ['10', '25', '50', '100', '250'], unit: 'mW'},
+  {number: 6, parent: 4, type: CRSF.PARAM_TYPE_UINT8, name: 'Fan Runtime', value: 30,
+   min: 0, max: 240, def: 30, unit: 's'},
+  {number: 7, parent: 0, type: CRSF.PARAM_TYPE_COMMAND, name: 'Bind', status: 0, timeout: 50,
+   value: 'Bind'},
+  {number: 8, parent: 0, type: CRSF.PARAM_TYPE_INFO, name: 'Bad/Good', value: '0/100'},
+]
+
+/* A second, smaller tree standing in for a linked receiver, so the Parameters tab's stacked
+ * per-device layout is developable without a radio link. */
+const MOCK_RX_PARAMS = [
+  null,
+  {number: 1, parent: 0, type: CRSF.PARAM_TYPE_TEXT_SELECTION, name: 'Telemetry Power', value: 1,
+   options: ['10', '25', '50', '100'], unit: 'mW'},
+  {number: 2, parent: 0, type: CRSF.PARAM_TYPE_TEXT_SELECTION, name: 'Ant. Mode', value: 0,
+   options: ['Gemini', 'Antenna 1', 'Antenna 2', 'Switch'], unit: ''},
+  {number: 3, parent: 0, type: CRSF.PARAM_TYPE_UINT8, name: 'Model Id', value: 255,
+   min: 0, max: 255, def: 255, unit: ''},
+  {number: 4, parent: 0, type: CRSF.PARAM_TYPE_COMMAND, name: 'Bind', status: 0, timeout: 50,
+   value: 'Bind'},
+  {number: 5, parent: 0, type: CRSF.PARAM_TYPE_INFO, name: 'Firmware', value: '4.0.0-mock'},
+]
+
+function mockEncodeParam(p) {
+  const bytes = [p.parent, p.type]
+  const pushStr = (s) => { for (const ch of String(s || '')) bytes.push(ch.charCodeAt(0) & 0xFF); bytes.push(0) }
+  pushStr(p.name)
+  switch (p.type) {
+    case CRSF.PARAM_TYPE_TEXT_SELECTION:
+      pushStr(p.options.join(';'))
+      bytes.push(p.value, 0, p.options.length - 1, p.value)
+      pushStr(p.unit)
+      break
+    case CRSF.PARAM_TYPE_UINT8:
+      bytes.push(p.value, p.min, p.max, p.def)
+      pushStr(p.unit)
+      break
+    case CRSF.PARAM_TYPE_COMMAND:
+      bytes.push(p.status, p.timeout)
+      pushStr(p.value)
+      break
+    case CRSF.PARAM_TYPE_INFO:
+    case CRSF.PARAM_TYPE_STRING:
+      pushStr(p.value)
+      break
+    default:                       // folders carry nothing past the name
+      break
+  }
+  return new Uint8Array(bytes)
+}
+
 function mockDocument(isTx) {
   return {
     settings: {
@@ -548,8 +653,19 @@ export class MockTransport {
     // Current firmware persists options; `?mock=tx&ro` clears the bit so the read-only
     // rendering (what old firmware in the field still reports) stays testable.
     const readOnly = new URLSearchParams(window.location.search).has('ro')
-    this.features = readOnly ? 0 : FEATURE_OPTIONS_WRITE
+    this.features = (readOnly ? 0 : FEATURE_OPTIONS_WRITE) | FEATURE_CRSF_PARAMS
     this.doc = mockDocument(this.isTx)
+    this._crsfCbs = []
+    // The CRSF bus as the browser sees it: the module on the cable, plus — on a TX — the
+    // receiver reachable over the air through it, which is what the stacked Parameters cards are
+    // for. An RX plugged in directly is alone on the bus.
+    this._crsfDevices = this.isTx
+      ? [{address: CRSF.ADDR_TX, name: this.doc.settings.product_name,
+          params: JSON.parse(JSON.stringify(MOCK_PARAMS))},
+         {address: CRSF.ADDR_RX, name: 'RM XR4',
+          params: JSON.parse(JSON.stringify(MOCK_RX_PARAMS))}]
+      : [{address: CRSF.ADDR_RX, name: this.doc.settings.product_name,
+          params: JSON.parse(JSON.stringify(MOCK_RX_PARAMS))}]
     this.hello = {
       version: this.doc.settings.version,
       'git-commit': this.doc.settings['git-commit'],
@@ -597,4 +713,87 @@ export class MockTransport {
   async previewButtonColors() {}
   async reboot() {}
   async reset() {}
+
+  // ---- CRSF tunnel ----------------------------------------------------------
+  onCrsf(cb) {
+    this._crsfCbs.push(cb)
+    return () => {
+      const i = this._crsfCbs.indexOf(cb)
+      if (i >= 0) this._crsfCbs.splice(i, 1)
+    }
+  }
+
+  _emit(device, type, payload) {
+    // Answer on a later task, as a real device would — a synchronous reply would let the panel
+    // pass tests it would fail against hardware.
+    const frame = CRSF.buildFrame(type, CRSF.ADDR_RADIO_TRANSMITTER, device.address, payload)
+    setTimeout(() => this._crsfCbs.slice().forEach((cb) => cb(frame)), 15)
+  }
+
+  async sendCrsf(frameBytes) {
+    const frame = CRSF.parseFrame(frameBytes)
+    if (!frame) return
+
+    if (frame.type === CRSF.DEVICE_PING) {
+      // A broadcast ping is answered by every device on the bus; a directed one only by its
+      // target. Same rule the router applies.
+      for (const device of this._crsfDevices) {
+        if (frame.dest !== CRSF.ADDR_BROADCAST && frame.dest !== device.address) continue
+        const info = [...device.name].map((c) => c.charCodeAt(0)).concat([0])
+        // serial 'ELRS', then hardware/firmware ids, parameter count and protocol version
+        info.push(0x45, 0x4C, 0x52, 0x53, 0, 0, 0, 1, 0, 0, 0, 1,
+                  device.params.length - 1, 0)
+        this._emit(device, CRSF.DEVICE_INFO, new Uint8Array(info))
+      }
+      return
+    }
+
+    const device = this._crsfDevices.find((d) => d.address === frame.dest)
+    if (!device) return
+
+    if (frame.type === CRSF.PARAM_READ) {
+      const p = device.params[frame.payload[0]]
+      if (!p) return
+      // One chunk each: the whole canned tree fits. Chunk reassembly only gets exercised
+      // against hardware, where the endpoint actually splits.
+      this._emit(device, CRSF.PARAM_ENTRY, this._entryFor(p))
+      return
+    }
+
+    if (frame.type === CRSF.PARAM_WRITE) {
+      const number = frame.payload[0]
+      const value = frame.payload[1]
+      if (number === 0) {
+        // The link-status poll. Only an ELRS TX answers it; on a receiver parameter 0 has no
+        // callback and nothing happens, which is what the panel expects.
+        if (device.address === CRSF.ADDR_TX) {
+          // badPkt, goodPkt (BE u16), flags, message
+          this._emit(device, CRSF.ELRS_STATUS, new Uint8Array([0, 0, 100, 0x01, 0]))
+        }
+        return
+      }
+      const p = device.params[number]
+      if (!p) return
+      if (p.type === CRSF.PARAM_TYPE_COMMAND) {
+        // A command write is answered with the parameter itself (the firmware's
+        // pushResponseChunk path); report "stopped" straight away, which is what a command with
+        // nothing left to do looks like.
+        p.status = 0
+        this._emit(device, CRSF.PARAM_ENTRY, this._entryFor(p))
+        return
+      }
+      // A plain write is NOT acknowledged — the panel re-reads the affected fields afterwards,
+      // exactly as it must against real firmware.
+      p.value = value
+    }
+  }
+
+  _entryFor(p) {
+    const body = mockEncodeParam(p)
+    const out = new Uint8Array(2 + body.length)
+    out[0] = p.number
+    out[1] = 0                       // chunksRemaining
+    out.set(body, 2)
+    return out
+  }
 }

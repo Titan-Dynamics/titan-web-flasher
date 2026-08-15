@@ -91,4 +91,28 @@ export function saveOptionsAndConfig(changes, successCB) {
         })
 }
 
+/*
+ * Re-read the whole config document from the device.
+ *
+ * A live CRSF PARAM_WRITE (packet rate, telemetry ratio, …) changes settings that also appear in
+ * the config document read once at connect, so without this the Options tab would keep showing
+ * the pre-write value and the two views would disagree about the same setting. Debounced, because
+ * a write is normally followed by a burst of parameter reloads.
+ */
+let refreshTimer = null
+export function refreshDeviceConfig({delay = 400} = {}) {
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => {
+        refreshTimer = null
+        Promise.resolve(transport.getConfig())
+            .then((data) => {
+                if (data.settings) elrsState.settings = data.settings
+                if (data.options) elrsState.options = data.options
+                if (data.config) elrsState.config = data.config
+            })
+            // A stale cache is a cosmetic problem; a popup over the Parameters tab is not.
+            .catch(() => {})
+    }, delay)
+}
+
 export let elrsState = new ElrsState()

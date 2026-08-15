@@ -19,7 +19,7 @@ import './assets/td-extensions.css'
 import {setTransport} from './utils/transport.js'
 import {elrsState} from './utils/state.js'
 import {applyFeatures, FEATURES} from './features.js'
-import {FEATURE_OPTIONS_WRITE} from '../js/usbconfig.js'
+import {FEATURE_CRSF_PARAMS, FEATURE_OPTIONS_WRITE} from '../js/usbconfig.js'
 
 // Panels register themselves as custom elements on import.
 import './pages/info-panel.js'
@@ -30,6 +30,7 @@ import './pages/buttons-panel.js'
 import './pages/models-panel.js'
 import './pages/connections-panel.js'
 import './pages/serial-panel.js'
+import './pages/params-panel.js'
 
 export {FEATURES, elrsState}
 
@@ -49,6 +50,9 @@ export async function initDashboard(session) {
     optionsWritable: typeof session.hasFeature === 'function'
       ? session.hasFeature(FEATURE_OPTIONS_WRITE)
       : false,
+    crsfParams: typeof session.hasFeature === 'function'
+      ? session.hasFeature(FEATURE_CRSF_PARAMS)
+      : false,
   })
   return {...data, features: FEATURES}
 }
@@ -65,9 +69,18 @@ export async function reloadDashboard(session) {
  * is how the firmware build's per-target feature blocks are replaced at runtime.
  */
 export function tabsFor(config) {
+  // The live CRSF parameter tree (packet rate, RF power, …). Gated on the HELLO feature bit
+  // rather than on module type: the firmware serves the tunnel from the same shared CRSFRouter on
+  // both TX and RX, so an RX plugged in directly serves its own tree. Placed right after
+  // Information — it is the tab users reach for most often.
+  const paramsTab = FEATURES.CRSF_PARAMS
+    ? [{id: 'params', label: 'Parameters', icon: 'sliders', tag: 'params-panel'}]
+    : []
+
   if (FEATURES.IS_TX) {
     const tabs = [
       {id: 'info', label: 'Information', icon: 'info', tag: 'info-panel'},
+      ...paramsTab,
       {id: 'binding', label: 'Binding', icon: 'bind', tag: 'binding-panel'},
       {id: 'options', label: 'Options', icon: 'sliders', tag: 'tx-options-panel'},
     ]
@@ -79,6 +92,7 @@ export function tabsFor(config) {
   }
   const tabs = [
     {id: 'info', label: 'Information', icon: 'info', tag: 'info-panel'},
+    ...paramsTab,
     {id: 'binding', label: 'Binding', icon: 'bind', tag: 'binding-panel'},
     {id: 'options', label: 'Options', icon: 'sliders', tag: 'rx-options-panel'},
     {id: 'serial', label: 'Serial', icon: 'serial', tag: 'serial-panel'},
