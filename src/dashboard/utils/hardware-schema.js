@@ -453,9 +453,9 @@ const HARDWARE_SCHEMA = [
             },
             {
                 id: 'led_red_invert',
-                label: 'Red LED inverted',
+                label: 'LED / Red LED inverted',
                 type: 'checkbox',
-                desc: 'LEDs are active LOW unless this is checked'
+                desc: 'Inverts the single LED pin, or the Red LED pin if set. Active LOW unless checked'
             },
             {
                 id: 'led_green',

@@ -2,14 +2,12 @@
 import {ref, watchPostEffect} from "vue";
 import {resetState, store} from "../js/state.js";
 import {generateFirmware} from "../js/firmware.js";
-import {DeviceError, FEATURE_DFU, UsbConfigSession} from "../js/usbconfig.js";
-import {appFilter, DFU_FILTER, findAuthorised, isDfu, isSupported, requestDevice, waitForDfu} from "../js/dfu/usb.js";
+import {DeviceError, ERR_BUSY, FEATURE_DFU} from "../js/usbconfig.js";
+import {discoverDevices, HttpConfigSession, unreachableHelp} from "../js/netconfig.js";
+import {DFU_FILTER, findAuthorised, isSupported, requestDevice, waitForDfu} from "../js/dfu/usb.js";
 import {DfuFlasher} from "../js/dfu/flasher.js";
 
 const DFU_FLASH_LOG_PREFIX = '[DFUFlash]'
-
-// DeviceError code for TLRS_ERR_BUSY (usbcfg_protocol.h): the module is armed.
-const ERR_BUSY = 2
 
 watchPostEffect(async (onCleanup) => {
   onCleanup(closeDevice)
@@ -155,25 +153,26 @@ async function useDfuDevice(device) {
   }
 }
 
-/** The running firmware was picked: ask it to reboot into its ROM bootloader, then find that. */
-async function rebootIntoDfu(device) {
-  writeln(`Connecting to ${device.productName || 'TitanLRS device'}`)
-  session = new UsbConfigSession()
+/**
+ * The running firmware answered on its USB network interface: ask it to reboot into its ROM
+ * bootloader, then find that over WebUSB.
+ */
+async function rebootIntoDfu({address, hello}) {
+  writeln(`Connecting to ${hello['product-name'] || 'TitanLRS device'} (${address})`)
+  session = new HttpConfigSession()
   try {
-    await session.connect(device)
+    await session.connect({address})
   } catch (e) {
     console.error(`${DFU_FLASH_LOG_PREFIX} connect:config-failed`, e)
     session = null
-    writeln(e?.name === 'SecurityError'
-      ? 'Access to the USB device was denied. On Linux, add udev rules for 1209:0001 and 0483:df11.'
-      : `Failed to connect to device: ${e?.message ?? e}`)
+    writeln(`Failed to connect to device: ${e?.message ?? e}`)
     failed.value = true
     return
   }
   if (!session.hasFeature(FEATURE_DFU)) {
-    writeln('This firmware cannot enter DFU from the web flasher. Hold BOOT0 while plugging in the device to manually enter DFU mode, then press Connect again.')
+    writeln('This firmware cannot enter DFU from the web flasher. Hold BOOT0 while plugging in the device to manually enter DFU mode, then press Select DFU Device.')
     await closeSession()
-    failed.value = true
+    needAuthorise.value = true
     return
   }
   try {
@@ -188,14 +187,13 @@ async function rebootIntoDfu(device) {
     return
   }
   writeln('Rebooting into DFU…')
-  // The device drops off the bus now; that is expected, so just release our side of it.
   await closeSession()
 
   const dfu = await waitForDfu(8000)
   if (!dfu) {
-    // First time on this machine: the bootloader is a different USB device and has never been
-    // granted to this page, so it needs the chooser (and a click).
-    writeln('Authorise the DFU device to continue')
+    // First time on this machine: the bootloader is a USB device this page has never been
+    // granted, so it needs the chooser (and a click).
+    writeln('Press Select DFU Device and pick the STM32 bootloader to continue')
     needAuthorise.value = true
     return
   }
@@ -208,28 +206,43 @@ async function connect() {
     noWebUsb.value = true
     return
   }
-  const app = appFilter(files.config || store.target?.config)
-  let device = null
   selectingDevice.value = true
   try {
-    device = await findAuthorised([DFU_FILTER]) ||
-             await findAuthorised([app]) ||
-             await requestDevice([app, DFU_FILTER])
-  } catch {
-    console.warn(`${DFU_FLASH_LOG_PREFIX} connect:no-device-selected`)
-    await closeDevice()
-    noDevice.value = true
+    // Already in the bootloader (BOOT0, or a previous attempt) and granted to this page.
+    const dfu = await findAuthorised([DFU_FILTER])
+    if (dfu) {
+      step.value++
+      await useDfuDevice(dfu)
+      return
+    }
+
+    // The running firmware, on its USB network interface. The address says which module type
+    // answered, so look where this firmware's type lives first.
+    const moduleType = files.deviceType === 'TX' || files.deviceType === 'RX' ? files.deviceType : null
+    let found = await discoverDevices({moduleType})
+    if (!found.length && moduleType) {
+      const other = await discoverDevices()
+      if (other.length) {
+        step.value++
+        writeln(`Found a ${other[0].hello['module-type']} module, but this firmware is for an ${moduleType}. Connect the ${moduleType} instead.`)
+        failed.value = true
+        return
+      }
+    }
+    if (found.length) {
+      step.value++
+      await rebootIntoDfu(found[0])
+      return
+    }
+
+    // Nothing answered: either the firmware predates USB networking, or the browser / OS is
+    // blocking local network access. A board held in BOOT0 can still be picked by hand.
+    step.value++
+    unreachableHelp().split('\n').forEach(writeln)
+    writeln('Or hold BOOT0 while plugging in the device, then press Select DFU Device.')
+    needAuthorise.value = true
   } finally {
     selectingDevice.value = false
-  }
-
-  if (device) {
-    step.value++
-    if (isDfu(device)) {
-      await useDfuDevice(device)
-    } else {
-      await rebootIntoDfu(device)
-    }
   }
 }
 
@@ -322,7 +335,7 @@ async function flash() {
           <br/>
           <VRow v-if="needAuthorise && !failed">
             <VCol>
-              <VBtn @click="authorise" color="primary" :disabled="selectingDevice">Authorise DFU device</VBtn>
+              <VBtn @click="authorise" color="primary" :disabled="selectingDevice">Select DFU Device</VBtn>
             </VCol>
           </VRow>
           <VRow v-if="enableFlash">

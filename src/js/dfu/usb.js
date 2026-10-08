@@ -1,24 +1,14 @@
 /*
- * usb.js — WebUSB device discovery for DFU flashing: the running application (USB config
- * interface) and the STM32 ROM bootloader it reboots into.
+ * usb.js — WebUSB discovery of the STM32 ROM bootloader for DFU flashing. The running firmware is
+ * reached over its USB network interface instead (netconfig.js), which is how it is asked to
+ * reboot into the bootloader.
  */
-
-import {USB_FILTER} from '../usbconfig.js'
 
 /** STMicroelectronics ROM bootloader in DFU mode. */
 export const DFU_FILTER = {vendorId: 0x0483, productId: 0xdf11}
 
 export function isSupported() {
   return typeof navigator !== 'undefined' && !!navigator.usb
-}
-
-/** The running firmware's VID:PID, from the target's `usb.app`, else the config-interface default. */
-export function appFilter(config) {
-  const app = config?.usb?.app
-  if (app && app.vendorId !== undefined && app.productId !== undefined) {
-    return {vendorId: Number(app.vendorId), productId: Number(app.productId)}
-  }
-  return {...USB_FILTER}
 }
 
 function matches(device, filter) {

@@ -3,14 +3,15 @@ import {computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch} 
 import HoverCard from '../components/HoverCard.vue'
 import moduleIcon from '../assets/brand/module-icon.png'
 
-// The Configurator page. It opens on a connect panel; its Connect to Device button raises the
-// WebUSB chooser (which needs that click's user activation) and the dashboard takes the session.
+// The Configurator page. It opens on a connect panel; its Connect to Device button looks for a
+// TitanLRS device on its USB network interface (netconfig.js) and the dashboard takes the session.
+// The first request raises Chrome's Local Network Access prompt.
 // idle -> connecting -> connected -> lost
 const phase = ref('idle')
 const errorText = ref('')
 const connectError = ref('')       // shown on the connect panel
 const connectBusy = ref(false)
-const webUsbSupported = ref(true)
+const choices = shallowRef([])     // more than one device answered: [{address, hello}]
 const hello = ref(null)
 const tabs = shallowRef([])
 const activeTab = ref('info')
@@ -20,9 +21,8 @@ const drawerOpen = ref(false)   // mobile: the firmware shell's slide-in sidebar
 
 const session = shallowRef(null)
 const dashboard = shallowRef(null)   // the lazily-imported src/dashboard/index.js module
-// A USBDevice object does not survive the device re-enumerating, but the permission does, so
-// remember which device it was and re-resolve it through navigator.usb.getDevices().
-const retainedSerial = ref(null)
+// Which device we were talking to, so a reconnect goes back to the same one.
+const retainedAddress = ref(null)
 
 const mockParam = new URLSearchParams(window.location.search).get('mock')
 
@@ -40,7 +40,7 @@ async function adopt(s) {
   phase.value = 'connecting'
   session.value = s
   hello.value = s.hello
-  retainedSerial.value = s.device?.serialNumber || null
+  retainedAddress.value = s.address || null
 
   s.onLost((reason) => {
     // A reboot/reset drops the port too; the dashboard announces those in advance so we can
@@ -57,41 +57,49 @@ async function adopt(s) {
   await renderPanel()
 }
 
-/** Open a fresh session for the reconnect path, preferring the device that was open before. */
-async function connect({useChooser = false} = {}) {
-  const usb = await import('../js/usbconfig.js')
-  const s = mockParam ? new usb.MockTransport(mockParam) : new usb.UsbConfigSession()
-  let device = null
-  if (!useChooser && !mockParam) {
-    const known = await usb.getKnownDevices()
-    device = known.find((d) => d.serialNumber === retainedSerial.value) || known[0] || null
+async function newSession() {
+  if (mockParam) {
+    const {MockTransport} = await import('../js/usbconfig.js')
+    return new MockTransport(mockParam)
   }
-  await s.connect(device)
+  const {HttpConfigSession} = await import('../js/netconfig.js')
+  return new HttpConfigSession()
+}
+
+/** Open a session to `address` (or the first device found) and build the panels for it. */
+async function connect(address = null) {
+  const s = await newSession()
+  await s.connect(address ? {address} : {})
   await adopt(s)
 }
 
 /**
- * The connect panel's button. WebUSB permission persists per origin, so a device granted before
- * is reopened without raising the chooser again; otherwise the chooser comes up from this click.
+ * The connect panel's button: find the devices on USB network links. One answers -> connect to
+ * it; a TX and an RX both plugged in -> let the user pick.
  */
-async function connectDevice() {
+async function connectDevice(address = null) {
   if (connectBusy.value) return
   connectError.value = ''
   connectBusy.value = true
-  let s = null
   try {
-    const usb = await import('../js/usbconfig.js')
-    s = mockParam ? new usb.MockTransport(mockParam) : new usb.UsbConfigSession()
-    const known = mockParam ? [] : await usb.getKnownDevices()
-    await s.connect(known.length === 1 ? known[0] : null)
-    await adopt(s)
-  } catch (err) {
-    if (s) { try { await s.disconnect() } catch { /* ignore */ } }
-    resetToIdle()
-    // Dismissing the device chooser is not an error worth reporting.
-    if (!(err && err.name === 'NotFoundError')) {
-      connectError.value = (err && err.message) || String(err)
+    if (!address && !mockParam) {
+      const {discoverDevices, unreachableHelp} = await import('../js/netconfig.js')
+      const found = await discoverDevices()
+      if (found.length === 0) {
+        connectError.value = unreachableHelp()
+        return
+      }
+      if (found.length > 1) {
+        choices.value = found
+        return
+      }
+      address = found[0].address
     }
+    choices.value = []
+    await connect(address)
+  } catch (err) {
+    resetToIdle()
+    connectError.value = (err && err.message) || String(err)
   } finally {
     connectBusy.value = false
   }
@@ -100,7 +108,7 @@ async function connectDevice() {
 /** Drop the device and the panels, and show the connect panel again. */
 function resetToIdle() {
   session.value = null
-  retainedSerial.value = null
+  retainedAddress.value = null
   hello.value = null
   tabs.value = []
   rebooting.value = false
@@ -111,9 +119,8 @@ function resetToIdle() {
 }
 
 /**
- * The on-device UI reloads the page after a reboot; over USB the device re-enumerates instead, so
- * offer an explicit reconnect. The granted permission survives the re-enumeration, so this
- * normally reconnects silently; if the device cannot be re-resolved, fall back to the chooser.
+ * Go back to the same device once it is reachable again. After a reboot it takes a few seconds
+ * for the board to come back and the host to renew its address, so keep trying for a while.
  */
 async function reconnect() {
   rebooting.value = false
@@ -121,19 +128,19 @@ async function reconnect() {
   phase.value = 'connecting'
   try { await session.value?.disconnect() } catch { /* ignore */ }
   session.value = null
-  try {
-    await connect()
-  } catch (err) {
-    // Could not re-resolve it — raise the chooser. This still runs inside the Reconnect click,
-    // so the transient user activation WebUSB needs is intact.
+  const deadline = Date.now() + RECONNECT_WINDOW_MS
+  let lastErr = null
+  while (Date.now() < deadline) {
     try {
-      await connect({useChooser: true})
+      await connect(retainedAddress.value)
       return
-    } catch (err2) {
-      errorText.value = (err2 && err2.message) || String(err2)
+    } catch (err) {
+      lastErr = err
+      await new Promise((r) => setTimeout(r, 1000))
     }
-    phase.value = 'lost'
   }
+  errorText.value = (lastErr && lastErr.message) || 'Device did not come back'
+  phase.value = 'lost'
 }
 
 function clearPanel() {
@@ -177,13 +184,25 @@ function onRebootAnnounced() {
   rebooting.value = true
 }
 
+// How long a reconnect keeps looking for the device after a reboot, and how long to wait before
+// starting to look.
+const RECONNECT_WINDOW_MS = 20000
+const REBOOT_SETTLE_MS = 2000
+
+// Over the network there is no chooser needing a click, so a device that announced a reboot is
+// picked up again on its own once it is back.
+watch(phase, async (p) => {
+  if (p === 'lost' && rebooting.value && retainedAddress.value) {
+    // The device answers the reboot request before it goes down: give it time to actually leave,
+    // or the first attempt reconnects to it just before it reboots.
+    await new Promise((r) => setTimeout(r, REBOOT_SETTLE_MS))
+    if (phase.value === 'lost' && rebooting.value) reconnect()
+  }
+})
+
 onMounted(async () => {
   window.addEventListener('td-device-rebooting', onRebootAnnounced)
-  // Load the chunk now so the Connect click reaches requestDevice() without spending its
-  // transient user activation on a network fetch.
-  const usb = await import('../js/usbconfig.js')
-  webUsbSupported.value = usb.isWebUsbSupported() || !!mockParam
-  // ?dashboard&mock=tx|rx (dev): the fixture transport needs no port and no user gesture.
+  // ?dashboard&mock=tx|rx (dev): the fixture transport needs no device.
   if (mockParam) await connectDevice()
 })
 
@@ -213,21 +232,27 @@ onBeforeUnmount(() => {
             <VCardTitle>Device Configuration</VCardTitle>
           </div>
           <VAlert v-if="connectError" type="error" variant="tonal" class="td-dash-connect-alert"
-                  closable @click:close="connectError = ''">
+                  style="white-space: pre-line" closable @click:close="connectError = ''">
             {{ connectError }}
           </VAlert>
-          <VAlert v-else-if="!webUsbSupported" type="warning" variant="tonal" class="td-dash-connect-alert">
-            This browser does not support WebUSB. Use Chrome, Edge or another Chromium-based
-            browser to configure a device over USB.
+          <VAlert v-else-if="choices.length" type="info" variant="tonal" class="td-dash-connect-alert">
+            More than one device is connected. Which one do you want to configure?
+            <div class="mt-2">
+              <VBtn v-for="c in choices" :key="c.address" class="mr-2" color="primary" variant="tonal"
+                    :loading="connectBusy" @click="connectDevice(c.address)">
+                {{ c.hello['module-type'] }} — {{ c.hello['product-name'] }}
+              </VBtn>
+            </div>
           </VAlert>
           <HoverCard min-height="100%" :interactive="false"
                      :image="moduleIcon" :hover-image="moduleIcon"
                      title="USB Device Config"
                      text="Connect a TitanLRS device over USB
-                     and click &quot;Connect to Device&quot; to edit the settings straight from the browser.">
+                     and click &quot;Connect to Device&quot; to edit the settings straight from the browser.
+                     Chrome will ask to allow access to devices on your local network: the device
+                     appears to your computer as a USB network adapter.">
             <template #action>
-              <VBtn color="primary" size="large" :loading="connectBusy"
-                    :disabled="!webUsbSupported" @click="connectDevice">
+              <VBtn color="primary" size="large" :loading="connectBusy" @click="connectDevice()">
                 Connect to Device
               </VBtn>
             </template>

@@ -2,4 +2,4 @@
 
 // Configurator: the header's CONFIGURATOR item and the ?dashboard link into the USB config
 // dashboard. Off until the firmware side is ready.
-export const DEVICE_CONFIG_ENABLED = false
+export const DEVICE_CONFIG_ENABLED = true
