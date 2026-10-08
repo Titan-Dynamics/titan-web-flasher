@@ -109,6 +109,7 @@ watchEffect(() => {
       for (const [ck, c] of Object.entries(v[store.targetType])) {
         quickSearchItems.value.push({
           title: c.product_name,
+          vendorName,
           value: { vendor: vk, target: ck, config: c }
         })
       }
@@ -161,6 +162,7 @@ watch(() => store.target, (v) => {
       <span class="hw-label">Quick Search</span>
       <VAutocomplete
         :items="quickSearchItems"
+        :filter-keys="['title', 'raw.vendorName']"
         v-model="quickSearch"
         placeholder="Device name or vendor…"
         clearable

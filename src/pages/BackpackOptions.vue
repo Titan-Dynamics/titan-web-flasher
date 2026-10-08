@@ -1,5 +1,5 @@
 <script setup>
-import {store} from "../js/state.js";
+import {isStm32, store} from "../js/state.js";
 import {watchEffect} from "vue";
 
 import BindPhraseInput from "../components/BindPhraseInput.vue";
@@ -30,7 +30,7 @@ watchEffect(() => {
     </div>
     <BindPhraseInput v-model="store.options.uid"/>
     <WiFiSettingsInput v-model:ssid="store.options.ssid" v-model:password="store.options.password"
-                       v-if="store.target?.config?.platform!=='stm32'"/>
+                       v-if="!isStm32()"/>
     <WiFiAutoOn v-model="store.options.wifiOnInternal"/>
     <FlashMethodSelect v-model="store.options.flashMethod" :methods="store.target?.config?.upload_methods"/>
   </div>

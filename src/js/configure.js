@@ -131,6 +131,56 @@ export class Configure {
         return binary
     }
 
+    // TitanLRS unified STM32 builds carry a fixed configuration slot (titan_slot_t in the
+    // firmware's lib/OPTIONS/options.h): "TLRSOPTS", LE16 version, LE16 reserved, then the same
+    // four regions ESP firmware finds appended after its app.
+    static #TITAN_SLOT_MAGIC = new TextEncoder().encode('TLRSOPTS')
+    static #TITAN_SLOT_VERSION = 1
+
+    static #findAll(binary, needle) {
+        const hits = []
+        const first = needle[0]
+        for (let i = binary.indexOf(first); i !== -1 && i + needle.length <= binary.length; i = binary.indexOf(first, i + 1)) {
+            let j = 1
+            while (j < needle.length && binary[i + j] === needle[j]) j++
+            if (j === needle.length) hits.push(i)
+        }
+        return hits
+    }
+
+    static #hasTitanSlot(binary) {
+        return this.#findAll(binary, this.#TITAN_SLOT_MAGIC).length > 0
+    }
+
+    static #writeRegion(binary, pos, bytes, size, what) {
+        if (bytes.length > size) throw new Error(`${what} is too long (${bytes.length} bytes, maximum ${size})`)
+        binary.fill(0, pos, pos + size)
+        binary.set(bytes, pos)
+        return pos + size
+    }
+
+    static #configureTitanSTM32(binary, deviceType, config, options, layoutBytes) {
+        const hits = this.#findAll(binary, this.#TITAN_SLOT_MAGIC)
+        if (hits.length !== 1) {
+            throw new Error(`Expected one TitanLRS configuration slot in the firmware, found ${hits.length}`)
+        }
+        let pos = hits[0]
+        const version = binary[pos + 8] | (binary[pos + 9] << 8)
+        if (version !== this.#TITAN_SLOT_VERSION) {
+            throw new Error(`Unsupported TitanLRS configuration slot version ${version}`)
+        }
+        pos += 12
+        const utf8 = new TextEncoder()
+        pos = this.#writeRegion(binary, pos, utf8.encode(config.product_name || ''), 128, 'Product name')
+        pos = this.#writeRegion(binary, pos, utf8.encode(config.lua_name || ''), 16, 'Lua name')
+        pos = this.#writeRegion(binary, pos, utf8.encode(JSON.stringify(options)), 512, 'Options')
+        this.#writeRegion(binary, pos, layoutBytes, 2048, 'Hardware layout')
+        console.info(`${CONFIGURE_LOG_PREFIX} titanSlot:patched`, {
+            deviceType, offset: hits[0], layoutBytes: layoutBytes.length
+        })
+        return binary
+    }
+
     static #checkStatus = (response) => {
         if (!response.ok) {
             throw new Error(`HTTP ${response.status} - ${response.statusText}`)
@@ -215,6 +265,47 @@ export class Configure {
         }
     }
 
+    // The hardware layout JSON appended to (ESP) or patched into (TitanLRS STM32) the firmware:
+    // a custom layout, else the target's layout file with its overlay applied.
+    static #resolveLayout = async (deviceType, config, folder, version, rxAsTxType) => {
+        let hardwareLayoutData
+        if (config.custom_layout) {
+            console.info(`${CONFIGURE_LOG_PREFIX} layout:custom`, {bytes: JSON.stringify(config.custom_layout).length})
+            hardwareLayoutData = this.#bstrToUi8(JSON.stringify(config.custom_layout))
+        } else if (config.layout_file) {
+            let hardwareLayoutFile
+            if (deviceType === 'TX' || deviceType === 'RX') {
+                // TX/RX layouts are resolved only from GitHub targets repos
+                hardwareLayoutFile = await (async () => {
+                    console.info(`${CONFIGURE_LOG_PREFIX} layout:github:start`, {path: `${deviceType}/${config.layout_file}`})
+                    const resp = await fetchHardwareFile(`${deviceType}/${config.layout_file}`)
+                    const buf = await resp.arrayBuffer()
+                    console.info(`${CONFIGURE_LOG_PREFIX} layout:github:success`, {path: `${deviceType}/${config.layout_file}`, bytes: buf.byteLength})
+                    return {data: new Uint8Array(buf), address: 0}
+                })()
+            } else {
+                // backpack and other device types keep existing local lookup flow
+                console.info(`${CONFIGURE_LOG_PREFIX} layout:local:start`, {path: `${folder}/${version}/hardware/${deviceType}/${config.layout_file}`})
+                hardwareLayoutFile = await this.#fetch_file(`${folder}/${version}/hardware/${deviceType}/${config.layout_file}`, 0)
+                    .catch(() => this.#fetch_file(`${folder}/hardware/${deviceType}/${config.layout_file}`, 0))
+            }
+            let layout = JSON.parse(this.#ui8ToBstr(hardwareLayoutFile.data))
+            if (config.overlay) {
+                layout = {
+                    ...layout,
+                    ...config.overlay
+                }
+            }
+            if (rxAsTxType === 'external') layout['serial_rx'] = layout['serial_tx']
+            hardwareLayoutData = this.#bstrToUi8(JSON.stringify(layout))
+            console.info(`${CONFIGURE_LOG_PREFIX} layout:resolved`, {bytes: hardwareLayoutData.length})
+        } else {
+            console.info(`${CONFIGURE_LOG_PREFIX} layout:none`)
+            hardwareLayoutData = new Uint8Array(0)
+        }
+        return hardwareLayoutData
+    }
+
     static download = async (folder, version, deviceType, rxAsTxType, radioType, config, firmwareUrl, options) => {
         console.info(`${CONFIGURE_LOG_PREFIX} download:start`, {
             folder,
@@ -226,47 +317,21 @@ export class Configure {
         if (rxAsTxType) firmwareUrl = firmwareUrl.replace('_RX', '_TX')
         if (config.platform === 'stm32') {
             console.info(`${CONFIGURE_LOG_PREFIX} download:stm32`, {firmwareUrl, radioType})
-            const entry = await this.#fetch_file(firmwareUrl, 0, (bin) => this.#configureSTM32(bin, deviceType, radioType, options))
+            const entry = await this.#fetch_file(firmwareUrl, 0)
+            if (this.#hasTitanSlot(entry.data)) {
+                const layoutBytes = await this.#resolveLayout(deviceType, config, folder, version, rxAsTxType)
+                entry.data = this.#configureTitanSTM32(entry.data, deviceType, config, options, layoutBytes)
+            } else if (this.#find_patch_location(entry.data) !== -1) {
+                entry.data = this.#configureSTM32(entry.data, deviceType, radioType, options)
+            } else {
+                throw new Error('This firmware has no TitanLRS configuration slot')
+            }
             console.info(`${CONFIGURE_LOG_PREFIX} download:complete`, {files: 1})
             return [entry]
         } else {
             const list = []
 
-            let hardwareLayoutData
-            if (config.custom_layout) {
-                console.info(`${CONFIGURE_LOG_PREFIX} layout:custom`, {bytes: JSON.stringify(config.custom_layout).length})
-                hardwareLayoutData = this.#bstrToUi8(JSON.stringify(config.custom_layout))
-            } else if (config.layout_file) {
-                let hardwareLayoutFile
-                if (deviceType === 'TX' || deviceType === 'RX') {
-                    // TX/RX layouts are resolved only from GitHub targets repos
-                    hardwareLayoutFile = await (async () => {
-                        console.info(`${CONFIGURE_LOG_PREFIX} layout:github:start`, {path: `${deviceType}/${config.layout_file}`})
-                        const resp = await fetchHardwareFile(`${deviceType}/${config.layout_file}`)
-                        const buf = await resp.arrayBuffer()
-                        console.info(`${CONFIGURE_LOG_PREFIX} layout:github:success`, {path: `${deviceType}/${config.layout_file}`, bytes: buf.byteLength})
-                        return {data: new Uint8Array(buf), address: 0}
-                    })()
-                } else {
-                    // backpack and other device types keep existing local lookup flow
-                    console.info(`${CONFIGURE_LOG_PREFIX} layout:local:start`, {path: `${folder}/${version}/hardware/${deviceType}/${config.layout_file}`})
-                    hardwareLayoutFile = await this.#fetch_file(`${folder}/${version}/hardware/${deviceType}/${config.layout_file}`, 0)
-                        .catch(() => this.#fetch_file(`${folder}/hardware/${deviceType}/${config.layout_file}`, 0))
-                }
-                let layout = JSON.parse(this.#ui8ToBstr(hardwareLayoutFile.data))
-                if (config.overlay) {
-                    layout = {
-                        ...layout,
-                        ...config.overlay
-                    }
-                }
-                if (rxAsTxType === 'external') layout['serial_rx'] = layout['serial_tx']
-                hardwareLayoutData = this.#bstrToUi8(JSON.stringify(layout))
-                console.info(`${CONFIGURE_LOG_PREFIX} layout:resolved`, {bytes: hardwareLayoutData.length})
-            } else {
-                console.info(`${CONFIGURE_LOG_PREFIX} layout:none`)
-                hardwareLayoutData = new Uint8Array(0)
-            }
+            const hardwareLayoutData = await this.#resolveLayout(deviceType, config, folder, version, rxAsTxType)
 
             if (config.platform.startsWith('esp32')) {
                 let startAddress = 0x1000

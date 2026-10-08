@@ -33,7 +33,9 @@ const getSettings = async (deviceType) => {
         } else {
             options['tlm-interval'] = store.options.tx.telemetryInterval
             options['fan-runtime'] = store.options.tx.fanMinRuntime
-            options['uart-inverted'] = store.options.tx.uartInverted
+            if (store.target.config.platform !== 'stm32') {
+                options['uart-inverted'] = store.options.tx.uartInverted
+            }
             options['unlock-higher-power'] = store.options.tx.higherPower
         }
         if (store.radio.endsWith('_900') || store.radio.endsWith('_dual')) {

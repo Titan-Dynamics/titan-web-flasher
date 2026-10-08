@@ -1,5 +1,6 @@
 <script setup>
 import { watch } from 'vue'
+import {isStm32} from '../js/state.js'
 
 let model = defineModel()
 const props = defineProps({methods: Array})
@@ -11,10 +12,14 @@ const flashMethods = [
   {value: 'etx',     title: 'EdgeTX Passthrough'},
   {value: 'passthru', title: 'Passthrough'},
   {value: 'stlink',  title: 'STLink'},
+  {value: 'dfu',     title: 'USB DFU'},
 ]
 
 function getFlashMethods() {
-  return flashMethods.filter(v => v.value === 'download' || (props.methods && props.methods.includes(v.value)))
+  // STM32 targets offer exactly their upload_methods; the patched binary is only meaningful to
+  // the web flasher, so there is no Local Download for them.
+  return flashMethods.filter(v => (v.value === 'download' && !isStm32()) ||
+                                  (props.methods && props.methods.includes(v.value)))
 }
 
 // Auto-select first available method whenever the methods list changes

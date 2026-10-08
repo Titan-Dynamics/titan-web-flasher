@@ -1,6 +1,8 @@
 import {reactive} from 'vue'
 
 export const store = reactive({
+    // null = the normal flashing flow; 'dashboard' = the USB config dashboard (Configurator)
+    view: null,
     currentStep: 1,
     firmware: null,
     folder: '',
@@ -39,6 +41,7 @@ export const store = reactive({
 })
 
 export function resetState() {
+    store.view = null
     store.currentStep = 1
     store.firmware = null
     store.folder = ''
@@ -70,6 +73,11 @@ export function resetState() {
         },
         flashMethod: null,
     }
+}
+
+/** The selected target is an STM32 board (no WiFi, flashed over USB DFU / STLink). */
+export function isStm32() {
+    return store.target?.config?.platform === 'stm32'
 }
 
 export function hasFeature(feature) {

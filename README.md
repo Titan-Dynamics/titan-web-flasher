@@ -1,9 +1,10 @@
 # TitanLRS Web Flasher
 
-Web-hosted flasher for TitanLRS firmware (ExpressLRS fork for Titan Dynamics).
+Web-hosted firmware flasher for TitanLRS firmware (ExpressLRS fork for Titan Dynamics).
+
+https://titan-dynamics.github.io/titan-web-flasher/
 
 # Using the Titan Web Flasher
-
 
 Usage guide: https://github.com/Titan-Dynamics/titan-web-flasher/wiki/Using-the-Titan-Web-Flasher
 
@@ -12,6 +13,7 @@ Usage guide: https://github.com/Titan-Dynamics/titan-web-flasher/wiki/Using-the-
 - UART (Receivers do not need to be in bootloader mode)
 - Betaflight passthrough
 - EdgeTX passthrough
+- USB DFU
 
 ## Developing and Testing Locally
 

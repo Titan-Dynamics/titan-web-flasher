@@ -170,6 +170,7 @@ watchPostEffect(() => {
           if (!version || compareSemanticVersions(version, c.min_version) >= 0) {
             quickSearchItems.value.push({
               title: `${c.product_name} (${radioLabel})`,
+              vendorName,
               value: { vendor: vk, radio: rk, target: ck, config: c }
             })
           }
@@ -219,6 +220,7 @@ watch(() => store.target, (v, _oldValue) => {
       <span class="hw-label">Quick Search</span>
       <VAutocomplete
         :items="quickSearchItems"
+        :filter-keys="['title', 'raw.vendorName']"
         v-model="quickSearch"
         placeholder="Device name, vendor, or frequency band…"
         clearable

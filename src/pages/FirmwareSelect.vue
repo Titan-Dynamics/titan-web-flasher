@@ -103,7 +103,6 @@ function setFirmware(firmware, targetType) {
   gap: 32px;
   justify-content: center;
   width: 1032px;
-  height: 383px;
   margin: 0 auto;
 }
 
