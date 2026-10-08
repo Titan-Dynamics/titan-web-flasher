@@ -31,7 +31,7 @@ body {
 }
 
 .td-main {
-    padding: 48px 0 80px 0;
+    padding: 20px 0;
 }
 
 /* ── Layout containers ──────────────────────────────────── */
@@ -276,7 +276,7 @@ body {
     }
 
     .td-main {
-        padding: 4px 0 48px 0;
+        padding: 16px 0 24px 0;
     }
 
     .section {

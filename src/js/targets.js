@@ -14,6 +14,10 @@ const TARGET_REPOS = [
 
 const TARGET_LOG_PREFIX = '[Targets]'
 
+// Dev only (`npm run dev`): a local targets.json and layout files staged by
+// scripts/stage-local-stm32.sh, merged last so they win. Never used by a production build.
+const LOCAL_TARGETS_BASE = './assets/targets-local'
+
 /**
  * Remove the "generic" vendor from a targets object.
  * Mirrors the TitanLRS CI step: jq 'del(.generic)'
@@ -85,6 +89,16 @@ export const TARGET_REPO_BASE_URLS = TARGET_REPOS.map(url => url.replace('/targe
  */
 export async function fetchHardwareFile(path) {
   console.info(`${TARGET_LOG_PREFIX} fetchHardwareFile:start`, { path })
+  if (import.meta.env.DEV) {
+    try {
+      const response = await fetch(`${LOCAL_TARGETS_BASE}/${path}`)
+      // Vite's dev server answers a missing file with index.html (200); that is not a hit.
+      if (response.ok && !(response.headers.get('content-type') || '').includes('text/html')) {
+        console.info(`${TARGET_LOG_PREFIX} fetchHardwareFile:local`, { path })
+        return response
+      }
+    } catch { /* no local copy; fall through to GitHub */ }
+  }
   // Try repos in reverse order (ELRS first) since it has priority
   for (let i = TARGET_REPO_BASE_URLS.length - 1; i >= 0; i--) {
     const url = `${TARGET_REPO_BASE_URLS[i]}/${path}`
@@ -130,6 +144,18 @@ export async function fetchTargets() {
 
   const errors = results.filter(r => r.error).map(r => ({ url: r.url, error: r.error }))
   const validSources = results.filter(r => r.data).map(r => r.data)
+
+  if (import.meta.env.DEV) {
+    // A missing local file is the normal case; ignore it silently. Vite's dev server answers an
+    // unknown path with index.html (200), hence the content-type check.
+    try {
+      const response = await fetch(`${LOCAL_TARGETS_BASE}/targets.json`)
+      if (response.ok && (response.headers.get('content-type') || '').includes('json')) {
+        validSources.push(await response.json())
+        console.info(`${TARGET_LOG_PREFIX} fetchTargets:local`, { url: `${LOCAL_TARGETS_BASE}/targets.json` })
+      }
+    } catch { /* ignore */ }
+  }
 
   const targets = validSources.length > 0 ? mergeTargets(...validSources) : null
 

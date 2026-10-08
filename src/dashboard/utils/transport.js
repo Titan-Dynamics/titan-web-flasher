@@ -24,6 +24,9 @@ const nullTransport = {
   reboot: notConnected,
   reset: notConnected,
   exportConfig: notConnected,
+  getHardware: notConnected,
+  saveHardware: notConnected,
+  resetHardware: notConnected,
   sendCrsf: notConnected,
   onCrsf: () => () => {},
 }
@@ -56,6 +59,11 @@ export const transport = {
   reboot: (...a) => { notifyRebooting(); return current.reboot(...a) },
   reset: (...a) => { notifyRebooting(); return current.reset(...a) },
   exportConfig: (...a) => current.exportConfig(...a),
+  // Hardware-layout override. Saving is reboot-to-apply like options; resetting clears the
+  // override and reboots the device, so it is announced like reset().
+  getHardware: (...a) => current.getHardware(...a),
+  saveHardware: (...a) => current.saveHardware(...a),
+  resetHardware: () => { notifyRebooting(); return current.reset({hardware: true}) },
   // The CRSF parameter tunnel. Unlike everything else here it is asynchronous in both
   // directions: sendCrsf() is fire-and-forget and replies arrive through onCrsf().
   sendCrsf: (...a) => (current.sendCrsf ? current.sendCrsf(...a) : notConnected()),

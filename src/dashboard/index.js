@@ -19,7 +19,7 @@ import './assets/td-extensions.css'
 import {setTransport} from './utils/transport.js'
 import {elrsState} from './utils/state.js'
 import {applyFeatures, FEATURES} from './features.js'
-import {FEATURE_CRSF_PARAMS, FEATURE_OPTIONS_WRITE} from '../js/usbconfig.js'
+import {FEATURE_CRSF_PARAMS, FEATURE_HARDWARE_WRITE, FEATURE_OPTIONS_WRITE} from '../js/usbconfig.js'
 
 // Panels register themselves as custom elements on import.
 import './pages/info-panel.js'
@@ -31,6 +31,7 @@ import './pages/models-panel.js'
 import './pages/connections-panel.js'
 import './pages/serial-panel.js'
 import './pages/params-panel.js'
+import './pages/hardware-panel.js'
 
 export {FEATURES, elrsState}
 
@@ -52,6 +53,9 @@ export async function initDashboard(session) {
       : false,
     crsfParams: typeof session.hasFeature === 'function'
       ? session.hasFeature(FEATURE_CRSF_PARAMS)
+      : false,
+    hardwareWrite: typeof session.hasFeature === 'function'
+      ? session.hasFeature(FEATURE_HARDWARE_WRITE)
       : false,
   })
   return {...data, features: FEATURES}
@@ -76,6 +80,11 @@ export function tabsFor(config) {
   const paramsTab = FEATURES.CRSF_PARAMS
     ? [{id: 'params', label: 'Parameters', icon: 'sliders', tag: 'params-panel'}]
     : []
+  // The hardware-layout override (ESP's /hardware.json). Last: it is a board-bring-up tool, not
+  // something a user reaches for day to day.
+  const hardwareTab = FEATURES.HARDWARE_WRITE
+    ? [{id: 'hardware', label: 'Hardware', icon: 'cpu', tag: 'hardware-panel'}]
+    : []
 
   if (FEATURES.IS_TX) {
     const tabs = [
@@ -88,6 +97,7 @@ export function tabsFor(config) {
       tabs.push({id: 'buttons', label: 'Buttons', icon: 'button', tag: 'buttons-panel'})
     }
     tabs.push({id: 'models', label: 'Import/Export', icon: 'box', tag: 'models-panel'})
+    tabs.push(...hardwareTab)
     return tabs
   }
   const tabs = [
@@ -102,5 +112,6 @@ export function tabsFor(config) {
   if (config.pwm !== undefined) {
     tabs.push({id: 'connections', label: 'Connections', icon: 'link', tag: 'connections-panel'})
   }
+  tabs.push(...hardwareTab)
   return tabs
 }

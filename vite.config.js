@@ -75,7 +75,7 @@ export default defineConfig({
       manifest: {
         name: 'TitanLRS Web Flasher',
         short_name: 'TitanLRS Flasher',
-        description: 'Web-hosted flasher for TitanLRS firmware - ExpressLRS for Titan Dynamics',
+        description: 'Web-hosted flasher for TitanLRS firmware',
         theme_color: '#4a88ab',
         display_override: ['window-controls-overlay', 'standalone', 'browser'],
         icons: [

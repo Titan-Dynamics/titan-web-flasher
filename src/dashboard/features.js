@@ -17,17 +17,25 @@ export const FEATURES = {
   // binding phrase become writable; firmware still in the field reports 0 and they render
   // read-only (options rows disabled rather than hidden, save replaced by a note).
   OPTIONS_WRITABLE: false,
-  // HELLO feature bit3. Firmware with the TCFG_CRSF tunnel gets the Parameters tab; firmware
+  // HELLO feature bit3. Firmware with the TLRS_CRSF tunnel gets the Parameters tab; firmware
   // without it never sees the tab at all, rather than a tab that silently times out.
   CRSF_PARAMS: false,
+  // HELLO `radio-type` ('LR1121', 'LR2021', 'SX128X', 'SX127X'). The Hardware panel uses it for
+  // the schema's per-radio rows.
+  RADIO_TYPE: '',
+  // HELLO feature bit5. Firmware that can store a hardware-layout override in its config flash
+  // gets the Hardware tab.
+  HARDWARE_WRITE: false,
 }
 
-export function applyFeatures({hello, settings, optionsWritable, crsfParams}) {
+export function applyFeatures({hello, settings, optionsWritable, crsfParams, hardwareWrite}) {
   FEATURES.IS_TX = (hello?.['module-type'] || settings?.['module-type']) === 'TX'
   FEATURES.HAS_SUBGHZ = !!settings?.has_low_band
-  FEATURES.HAS_LR1121 = (hello?.['radio-type'] || settings?.['radio-type']) === 'LR1121'
+  FEATURES.RADIO_TYPE = hello?.['radio-type'] || settings?.['radio-type'] || ''
+  FEATURES.HAS_LR1121 = FEATURES.RADIO_TYPE === 'LR1121'
   FEATURES.OPTIONS_WRITABLE = !!optionsWritable
   FEATURES.CRSF_PARAMS = !!crsfParams
+  FEATURES.HARDWARE_WRITE = !!hardwareWrite
   return FEATURES
 }
 

@@ -3,7 +3,7 @@
  *
  * Ported from the TitanLRS-Backpack web UI's `CrsfParams` state machine
  * (TitanLRS-Backpack/html/src/shared/scan.js). That copy runs against a WiFi coprocessor over a
- * WebSocket; this one runs over the WebUSB config session's TCFG_CRSF tunnel. The protocol logic
+ * WebSocket; this one runs over the WebUSB config session's TLRS_CRSF tunnel. The protocol logic
  * — device discovery, sequential enumeration, chunk reassembly, retries, folder navigation,
  * command parameters — is the same, because the device end is the same CRSFEndpoint.
  * See WEB_LUA_PARAMS_PLAN.md §7.3 for the substitutions. The Backpack is reference only; the two

@@ -29,21 +29,24 @@ const USB_VENDOR_CLASS = 0xFF
 export const PROTOCOL_VERSION = 1
 const CHUNK_MAX = 1000
 
-const TCFG_HELLO = 0x5443
-const TCFG_BYE = 0x5444
-const TCFG_GET = 0x5445
-const TCFG_SET = 0x5446
-const TCFG_REBOOT = 0x5447
-const TCFG_RESET = 0x5448
-const TCFG_PING = 0x5449
-const TCFG_CRSF = 0x544A
+const TLRS_HELLO = 0x5443
+const TLRS_BYE = 0x5444
+const TLRS_GET = 0x5445
+const TLRS_SET = 0x5446
+const TLRS_REBOOT = 0x5447
+const TLRS_RESET = 0x5448
+const TLRS_PING = 0x5449
+const TLRS_CRSF = 0x544A
+const TLRS_DFU = 0x544B
 
 const RES_CONFIG = 0
 const RES_OPTIONS = 1
+const RES_HARDWARE = 2
 
 const GETFLAG_EXPORT = 1 << 0
 const RESETFLAG_CONFIG = 1 << 0
 const RESETFLAG_OPTIONS = 1 << 1
+const RESETFLAG_HARDWARE = 1 << 2
 
 const CHUNK_FIRST = 1 << 0
 const CHUNK_LAST = 1 << 1
@@ -52,11 +55,13 @@ export const FEATURE_OPTIONS_WRITE = 1 << 0
 export const FEATURE_CW = 1 << 1
 export const FEATURE_LR1121_UPDATE = 1 << 2
 export const FEATURE_CRSF_PARAMS = 1 << 3
+export const FEATURE_DFU = 1 << 4
+export const FEATURE_HARDWARE_WRITE = 1 << 5
 
 const FN_NAMES = {
-  [TCFG_HELLO]: 'hello', [TCFG_BYE]: 'bye', [TCFG_GET]: 'get', [TCFG_SET]: 'set',
-  [TCFG_REBOOT]: 'reboot', [TCFG_RESET]: 'reset', [TCFG_PING]: 'ping',
-  [TCFG_CRSF]: 'crsf',
+  [TLRS_HELLO]: 'hello', [TLRS_BYE]: 'bye', [TLRS_GET]: 'get', [TLRS_SET]: 'set',
+  [TLRS_REBOOT]: 'reboot', [TLRS_RESET]: 'reset', [TLRS_PING]: 'ping',
+  [TLRS_CRSF]: 'crsf', [TLRS_DFU]: 'dfu',
 }
 
 const ERR_NAMES = {
@@ -170,7 +175,7 @@ export class UsbConfigSession {
     this._watchDisconnect()
     this._readLoopDone = this._readLoop()
 
-    const resp = await this._request(TCFG_HELLO, Uint8Array.of(PROTOCOL_VERSION))
+    const resp = await this._request(TLRS_HELLO, Uint8Array.of(PROTOCOL_VERSION))
     if (resp.length < 5) throw new DeviceError(3, 'short HELLO response')
     const view = new DataView(resp.buffer, resp.byteOffset, resp.byteLength)
     this.features = view.getUint32(1, true)
@@ -184,7 +189,7 @@ export class UsbConfigSession {
   async disconnect() {
     this._closing = true
     this._stopKeepalive()
-    try { await this._request(TCFG_BYE) } catch { /* device may already be gone */ }
+    try { await this._request(TLRS_BYE) } catch { /* device may already be gone */ }
     await this._teardown()
   }
 
@@ -251,7 +256,7 @@ export class UsbConfigSession {
     // The device closes an idle session after 3 s; a 1 Hz ping keeps it open while the user
     // reads the page. Failures just mean the device went away, which onLost() reports.
     this._keepalive = setInterval(() => {
-      this._enqueue(() => this._request(TCFG_PING)).catch(() => {})
+      this._enqueue(() => this._request(TLRS_PING)).catch(() => {})
     }, KEEPALIVE_MS)
   }
 
@@ -354,10 +359,10 @@ export class UsbConfigSession {
   }
 
   _dispatch({direction, fn, payload}) {
-    // TCFG_CRSF is the one asynchronous function: the device emits parameter frames unsolicited,
+    // TLRS_CRSF is the one asynchronous function: the device emits parameter frames unsolicited,
     // with no request outstanding. It must be routed before the _pending match or an inbound
     // frame that happens to arrive mid-request would be taken for that request's reply.
-    if (fn === TCFG_CRSF) {
+    if (fn === TLRS_CRSF) {
       if (direction === '>') this._crsfCbs.slice().forEach((cb) => {
         try { cb(payload) } catch { /* a listener must not break the read loop */ }
       })
@@ -429,7 +434,7 @@ export class UsbConfigSession {
         return true
       }
       // Chunked reads can span many frames; give the whole transfer a generous window.
-      return this._request(TCFG_GET, Uint8Array.of(resource, exportMode ? GETFLAG_EXPORT : 0),
+      return this._request(TLRS_GET, Uint8Array.of(resource, exportMode ? GETFLAG_EXPORT : 0),
         {collect, timeout: 10000}).then(() => new TextDecoder().decode(assembled))
     })
   }
@@ -440,6 +445,10 @@ export class UsbConfigSession {
 
   async getOptions() {
     return JSON.parse(await this._getRaw(RES_OPTIONS, false))
+  }
+
+  async getHardware() {
+    return JSON.parse(await this._getRaw(RES_HARDWARE, false))
   }
 
   exportConfig({export: exportMode = true} = {}) {
@@ -466,7 +475,7 @@ export class UsbConfigSession {
         frame.set(piece, hdrLen)
         // The final chunk triggers a ~70 ms flash commit (more for a models import), so give
         // it much longer than a plain chunk ack.
-        const resp = await this._request(TCFG_SET, frame, {timeout: last ? 15000 : this.timeout})
+        const resp = await this._request(TLRS_SET, frame, {timeout: last ? 15000 : this.timeout})
         if (last) return new TextDecoder().decode(resp.subarray(1))
         seq++
       }
@@ -481,6 +490,12 @@ export class UsbConfigSession {
     // Firmware without FEATURE_OPTIONS_WRITE answers ERR_UNSUPPORTED; the UI gates the save
     // buttons on the bit so that only ever happens to a hand-crafted request.
     return this._setRaw(RES_OPTIONS, JSON.stringify(options))
+  }
+
+  saveHardware(doc) {
+    // Firmware without FEATURE_HARDWARE_WRITE answers ERR_UNSUPPORTED; the Hardware tab is only
+    // offered when the bit is set. The device stores the layout and applies it on the next boot.
+    return this._setRaw(RES_HARDWARE, JSON.stringify(doc))
   }
 
   importConfig(jsonText) {
@@ -503,7 +518,7 @@ export class UsbConfigSession {
    */
   sendCrsf(frameBytes) {
     if (!this.connected) return Promise.reject(new Error('Not connected'))
-    return this._send(TCFG_CRSF, frameBytes)
+    return this._send(TLRS_CRSF, frameBytes)
   }
 
   /** Register a callback for inbound CRSF frames. Returns an unsubscribe, matching onLost(). */
@@ -516,13 +531,23 @@ export class UsbConfigSession {
   }
 
   reboot() {
-    return this._enqueue(() => this._request(TCFG_REBOOT)).then(() => {})
+    return this._enqueue(() => this._request(TLRS_REBOOT)).then(() => {})
+  }
+
+  /**
+   * Ask the device to reboot into its ROM DFU bootloader (FEATURE_DFU). The device acks and then
+   * drops off the bus, so the session is closed once the ack is in: the disconnect that follows
+   * is the expected outcome, not a lost device, and there is nobody left to say BYE to.
+   */
+  rebootToDfu() {
+    return this._enqueue(() => this._request(TLRS_DFU)).then(() => this._teardown())
   }
 
   reset(flags = {config: true}) {
     const bits = (flags.config || flags.model ? RESETFLAG_CONFIG : 0) |
-                 (flags.options ? RESETFLAG_OPTIONS : 0)
-    return this._enqueue(() => this._request(TCFG_RESET, Uint8Array.of(bits))).then(() => {})
+                 (flags.options ? RESETFLAG_OPTIONS : 0) |
+                 (flags.hardware ? RESETFLAG_HARDWARE : 0)
+    return this._enqueue(() => this._request(TLRS_RESET, Uint8Array.of(bits))).then(() => {})
   }
 }
 
@@ -646,15 +671,41 @@ function mockDocument(isTx) {
   }
 }
 
+/* The Part C TX layout (TD LR2021 STM32H7 Gemini TX), as a unified STM32 build reports it. */
+const MOCK_HARDWARE = {
+  serial_rx: 'PB10', serial_tx: 'PB10',
+  radio_nss: 'PE0', radio_sck: 'PE12', radio_miso: 'PE13', radio_mosi: 'PE14',
+  radio_rst: 'PE7', radio_dio1: 'PE1', radio_busy: 'PE9',
+  radio_nss_2: 'PE8', radio_rst_2: 'PE5', radio_dio1_2: 'PE6', radio_busy_2: 'PE15',
+  radio_dcdc: true,
+  config_flash_cs: 'PD6', config_flash_sck: 'PB3', config_flash_miso: 'PB4', config_flash_mosi: 'PD7',
+  led_red: 'PE3',
+  button: 'PE2', button_active_high: true,
+  power_min: 0, power_high: 3, power_max: 3, power_default: 0,
+  power_control: 0,
+  power_values: [19, 25, 31, 37],
+  power_values2: [19, 25, 31, 37],
+  power_values_dual: [0, 8, 16, 24],
+}
+const MOCK_CONFIG_FLASH_KEYS = ['config_flash_cs', 'config_flash_sck', 'config_flash_miso', 'config_flash_mosi']
+
 export class MockTransport {
   constructor(moduleType = 'tx') {
     this.name = 'mock'
     this.isTx = moduleType.toLowerCase() === 'tx'
     // Current firmware persists options; `?mock=tx&ro` clears the bit so the read-only
     // rendering (what old firmware in the field still reports) stays testable.
-    const readOnly = new URLSearchParams(window.location.search).has('ro')
-    this.features = (readOnly ? 0 : FEATURE_OPTIONS_WRITE) | FEATURE_CRSF_PARAMS
+    const params = new URLSearchParams(window.location.search)
+    const readOnly = params.has('ro')
+    // `&nohw` clears the hardware-override bit, i.e. firmware without config-flash storage.
+    const noHardware = params.has('nohw')
+    this.features = (readOnly ? 0 : FEATURE_OPTIONS_WRITE) | FEATURE_CRSF_PARAMS | FEATURE_DFU |
+                    (noHardware ? 0 : FEATURE_HARDWARE_WRITE)
     this.doc = mockDocument(this.isTx)
+    // The flashed (slot) layout and the stored override, mirroring the firmware's boot rule:
+    // an override replaces the layout except for the config-flash pins.
+    this.slotHardware = {...MOCK_HARDWARE, ...(this.isTx ? {} : {serial_rx: 'PB11'})}
+    this.hardwareOverride = null
     this._crsfCbs = []
     // The CRSF bus as the browser sees it: the module on the cable, plus — on a TX — the
     // receiver reachable over the air through it, which is what the stacked Parameters cards are
@@ -712,7 +763,30 @@ export class MockTransport {
   async importConfig(text) { return this.saveConfig(JSON.parse(text).config || JSON.parse(text)) }
   async previewButtonColors() {}
   async reboot() {}
-  async reset() {}
+  async rebootToDfu() {}
+  async reset(flags = {}) {
+    if (flags.hardware) {
+      this.hardwareOverride = null
+      this.doc.settings.custom_hardware = false
+    }
+  }
+
+  async getHardware() {
+    return JSON.parse(JSON.stringify(this.hardwareOverride || this.slotHardware))
+  }
+  async saveHardware(doc) {
+    if (!this.hasFeature(FEATURE_HARDWARE_WRITE)) throw new Error('UNSUPPORTED: no config flash')
+    // Applied as the firmware does at the next boot (the mock has no boot, so straight away).
+    const effective = {...doc}
+    for (const k of MOCK_CONFIG_FLASH_KEYS) {
+      if (this.slotHardware[k] !== undefined) effective[k] = this.slotHardware[k]
+      else delete effective[k]
+    }
+    effective.customised = true
+    this.hardwareOverride = effective
+    this.doc.settings.custom_hardware = true
+    return 'Hardware updated - reboot to apply'
+  }
 
   // ---- CRSF tunnel ----------------------------------------------------------
   onCrsf(cb) {

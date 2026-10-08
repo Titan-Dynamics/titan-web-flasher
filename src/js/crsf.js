@@ -1,12 +1,5 @@
 /*
  * crsf.js — CRSF frame codec for the parameter tunnel.
- *
- * Ported essentially verbatim from the TitanLRS-Backpack web UI
- * (TitanLRS-Backpack/html/src/shared/scan.js, the `CRSF` object). That copy talks to a WiFi
- * coprocessor over a WebSocket; this one is fed by the WebUSB config session's TCFG_CRSF tunnel.
- * The codec itself is transport-agnostic and unchanged — see WEB_LUA_PARAMS_PLAN.md §7.1.
- *
- * The two copies are expected to diverge from here; the Backpack is reference only.
  */
 
 export const CRSF = {

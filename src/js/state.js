@@ -1,14 +1,8 @@
 import {reactive} from 'vue'
 
 export const store = reactive({
-    // null = the normal flashing flow; 'dashboard' = the USB Device Dashboard
+    // null = the normal flashing flow; 'dashboard' = the USB config dashboard (Configurator)
     view: null,
-    // A live UsbConfigSession, opened by the Connect to Device button on the landing page and
-    // handed to the dashboard. The WebUSB device chooser needs the click's user activation, so
-    // the connection has to be made there rather than after the dashboard mounts.
-    usbSession: null,
-    // Message from a failed/lost USB connection, shown on the landing page.
-    usbError: '',
     currentStep: 1,
     firmware: null,
     folder: '',
@@ -48,7 +42,6 @@ export const store = reactive({
 
 export function resetState() {
     store.view = null
-    store.usbSession = null
     store.currentStep = 1
     store.firmware = null
     store.folder = ''
@@ -80,6 +73,11 @@ export function resetState() {
         },
         flashMethod: null,
     }
+}
+
+/** The selected target is an STM32 board (no WiFi, flashed over USB DFU / STLink). */
+export function isStm32() {
+    return store.target?.config?.platform === 'stm32'
 }
 
 export function hasFeature(feature) {

@@ -1,5 +1,5 @@
 <script setup>
-import {store} from "../js/state.js";
+import {isStm32, store} from "../js/state.js";
 import BindPhraseInput from "../components/BindPhraseInput.vue";
 import RFSelect from "../components/RFSelect.vue";
 import WiFiSettingsInput from "../components/WiFiSettingsInput.vue";
@@ -18,7 +18,7 @@ import TXOptions from "../components/TXOptions.vue";
       <BindPhraseInput v-model="store.options.uid"/>
       <RFSelect v-model:region="store.options.region" v-model:domain="store.options.domain" :radio="store.radio"/>
       <WiFiSettingsInput v-model:ssid="store.options.ssid" v-model:password="store.options.password"
-                         v-if="store.target?.config?.platform!=='stm32'"/>
+                         v-if="!isStm32()"/>
       <FlashMethodSelect v-model="store.options.flashMethod" :methods="store.target?.config?.upload_methods"/>
     </VForm>
     <VExpansionPanels variant="popout">

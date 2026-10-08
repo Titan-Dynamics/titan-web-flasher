@@ -1,7 +1,7 @@
 <script setup>
 import {computed, defineAsyncComponent} from 'vue';
-import {useDisplay} from 'vuetify';
 import {resetState, store} from './js/state';
+import {DEVICE_CONFIG_ENABLED} from './js/featureFlags';
 
 import FirmwareSelect from './pages/FirmwareSelect.vue';
 import MainHardwareSelect from './pages/MainHardwareSelect.vue';
@@ -14,21 +14,26 @@ import BackpackOptions from "./pages/BackpackOptions.vue";
 import Download from "./pages/Download.vue";
 import SerialFlash from "./pages/SerialFlash.vue";
 import STLinkFlash from "./pages/STLinkFlash.vue";
+import DFUFlash from "./pages/DFUFlash.vue";
 
 // Lazy so the flashing path never downloads the dashboard or its ported Lit panels.
 const DeviceDashboard = defineAsyncComponent(() => import('./pages/DeviceDashboard.vue'));
 
 import ReloadPrompt from './components/ReloadPrompt.vue';
-import logoUrl from './assets/brand/td-full-logo-white.png';
+import SiteBar from './components/SiteBar.vue';
 
-const {mobile} = useDisplay();
-const appBarHeight = computed(() => (mobile.value ? 170 : 320));
 const isLastStep = computed(() => store.currentStep === 3);
 const nextLabel = computed(() => (isLastStep.value ? 'Done' : 'Next'));
 
 function goHome() {
   resetState()
   window.history.replaceState({}, '', window.location.pathname)
+}
+
+/** Header menu: FIRMWARE is the flasher's landing page, CONFIGURATOR the USB config dashboard. */
+function onNavigate(page) {
+  goHome()
+  if (page === 'configurator') store.view = 'dashboard'
 }
 
 function stepPrev() {
@@ -68,35 +73,26 @@ else if (store.targetType)
 
 store.options.flashMethod = urlParams.get('method');
 
-// Dev deep link into the USB config dashboard: ?dashboard&mock=tx|rx. It is mock-only on
-// purpose — a real device is opened by the Connect to Device button on the landing page,
-// because the WebUSB chooser can only be raised from a user gesture.
-if (urlParams.has('dashboard') && urlParams.has('mock')) store.view = 'dashboard';
+// Deep link into the configurator: ?dashboard opens its connect panel, and ?dashboard&mock=tx|rx
+// (dev) connects it to the built-in mock device straight away.
+if (DEVICE_CONFIG_ENABLED && urlParams.has('dashboard')) store.view = 'dashboard';
 
 </script>
 
 <template>
   <VApp class="td-app">
     <ReloadPrompt />
-    <!--
-      The Device Dashboard owns the whole page: once connected it reproduces the firmware's own
-      full-viewport shell (fixed left nav + topbar), so it must not sit inside the flasher's app
-      bar and stepper chrome. The flashing wizard below is unchanged.
-    -->
-    <DeviceDashboard v-if="store.view === 'dashboard'"/>
-    <VLayout v-else>
-      <VAppBar :height="appBarHeight" class="td-app-bar" flat>
-        <div class="td-app-bar__content td-app-bar__content--stack">
-          <div class="td-brand">
-            <button class="td-logo-button" type="button" @click="goHome" aria-label="Back to landing page">
-              <img class="td-logo" :src="logoUrl" alt="Titan Dynamics" />
-            </button>
-          </div>
-          <div class="td-title__sub">TitanLRS Web Flasher</div>
-        </div>
-      </VAppBar>
-      <VMain class="td-main">
+    <div class="td-shell">
+      <!--
+        The titandynamics.aero header on every page. The configurator reproduces the firmware's
+        full-viewport shell (fixed left nav + topbar) under it, so the bar is pinned there.
+      -->
+      <SiteBar :active="store.view === 'dashboard' ? 'configurator' : 'firmware'"
+               :fixed="store.view === 'dashboard'" @home="goHome" @navigate="onNavigate"/>
+      <DeviceDashboard v-if="store.view === 'dashboard'"/>
+      <main v-else class="td-main">
         <div class="section">
+          <div class="td-title__sub">TitanLRS Firmware Flasher</div>
           <VFadeTransition mode="out-in" >
             <VContainer max-width="1280px" v-if="!store.targetType" style="display: grid; gap: 40px;">
               <FirmwareSelect/>
@@ -121,6 +117,7 @@ if (urlParams.has('dashboard') && urlParams.has('mock')) store.view = 'dashboard
                     <Download v-if="store.options.flashMethod==='download'"/>
                     <Download v-else-if="store.options.flashMethod==='wifi'"/>
                     <STLinkFlash v-else-if="store.options.flashMethod==='stlink'"/>
+                    <DFUFlash v-else-if="store.options.flashMethod==='dfu'"/>
                     <SerialFlash v-else/>
                   </template>
                   <VStepperActions :disabled="disableNext()" :next-text="nextLabel" @click:prev="stepPrev" @click:next="stepNext"/>
@@ -129,50 +126,34 @@ if (urlParams.has('dashboard') && urlParams.has('mock')) store.view = 'dashboard
             </VContainer>
           </VFadeTransition>
         </div>
-      </VMain>
-    </VLayout>
+      </main>
+    </div>
   </VApp>
 </template>
 
 <style>
-.td-app-bar {
-  background: var(--td-bg-0) !important;
-  border-bottom: none !important;
-}
-
-.td-app-bar__content {
+/* Full-height column: the bar on top, the page content centred in what is left. */
+.td-shell {
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 28px 16px 0 16px;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-.td-brand {
+/* Centre the page horizontally (the containers' max-width) and vertically (auto margins). Auto
+   margins, unlike justify-content: center, fall back to top-aligned scrolling when the content is
+   taller than the screen, so small devices never lose the top of the page. */
+.td-main {
+  flex: 1 0 auto;
   display: flex;
-  align-items: center;
+  flex-direction: column;
 }
 
-.td-logo-button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.td-logo-button:focus-visible {
-  outline: 2px solid var(--td-brand);
-  outline-offset: 6px;
-  border-radius: var(--td-r-sm);
-}
-
-.td-logo {
-  width: 336px;
-  height: 75px;
-  max-width: 100%;
-  object-fit: contain;
+.td-main > .section {
+  width: 100%;
+  margin: auto 0;
+  gap: 16px;
 }
 
 .td-title__sub {
@@ -180,27 +161,13 @@ if (urlParams.has('dashboard') && urlParams.has('mock')) store.view = 'dashboard
   font-weight: 400;
   color: var(--td-fg-mute);
   letter-spacing: 0.04em;
-  text-transform: none;
   text-align: center;
   font-family: var(--td-font);
 }
 
-
-@media (max-width: 960px) {
-  .td-logo {
-    max-height: 48px;
-  }
-
-  .td-title__sub {
-    font-size: 22px;
-  }
-
-}
-
 @media (max-width: 640px) {
-  .td-app-bar__content {
-    gap: 6px;
-    padding: 8px 12px 0 12px;
+  .td-main > .section {
+    gap: 10px;
   }
 
   .td-title__sub {
