@@ -2,12 +2,15 @@
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch} from 'vue'
 import HoverCard from '../components/HoverCard.vue'
 import moduleIcon from '../assets/brand/module-icon.png'
+import controllerIcon from '../assets/brand/controller-icon.png'
+import radioIcon from '../assets/brand/radio-icon.png'
 
-// The Configurator page. It opens on a connect panel; its Connect to Device button looks for a
-// TitanLRS device on its USB network interface (netconfig.js) and the dashboard takes the session.
-// The first request raises Chrome's Local Network Access prompt.
-// idle -> connecting -> connected -> lost
-const phase = ref('idle')
+// The Configurator page. On opening it looks for a TitanLRS device on its USB network interface
+// (netconfig.js) by itself, behind a spinner; if exactly one answers the dashboard takes the
+// session. Otherwise it falls back to the connect panel, whose Connect to Device button runs the
+// same search. On a first visit the search raises Chrome's Local Network Access prompt.
+// probing -> idle (connect panel) | connecting -> connected -> lost
+const phase = ref('probing')
 const errorText = ref('')
 const connectError = ref('')       // shown on the connect panel
 const connectBusy = ref(false)
@@ -105,6 +108,66 @@ async function connectDevice(address = null) {
   }
 }
 
+/**
+ * Opening the page: look for the device without waiting for the button. One device answers ->
+ * connect to it. None (each probe times out) -> the connect panel, without an error, as nothing
+ * was asked for yet. Several -> the panel with the choice.
+ *
+ * On a first visit the search raises Chrome's Local Network Access prompt, and the probes time
+ * out while it is still open. If the user then allows it, search again from the panel.
+ */
+async function autoConnect() {
+  if (mockParam) {
+    await connectDevice()
+    return
+  }
+  let found = []
+  try {
+    const {discoverDevices, localNetworkPermission} = await import('../js/netconfig.js')
+    const permission = await localNetworkPermission()
+    if (permission && permission.state !== 'granted') {
+      permission.addEventListener('change', () => {
+        if (permission.state === 'granted' && phase.value === 'idle' && !connectBusy.value && !unmounted) {
+          connectDevice()
+        }
+      }, {once: true})
+    }
+    // Blocked: every request fails at once, so there is nothing to wait for; the panel explains.
+    if (permission?.state !== 'denied') found = await discoverDevices()
+  } catch { /* fall back to the panel */ }
+  if (unmounted || phase.value !== 'probing') return
+  if (found.length === 1) {
+    try {
+      await connect(found[0].address)
+    } catch (err) {
+      resetToIdle()
+      connectError.value = (err && err.message) || String(err)
+    }
+    return
+  }
+  choices.value = found
+  phase.value = 'idle'
+}
+
+// The device chooser's cards, from each device's /hello.
+function deviceIcon(h) {
+  return h['module-type'] === 'RX' ? radioIcon : controllerIcon
+}
+
+function deviceTitle(h) {
+  return h['module-type'] === 'RX' ? 'Receiver' : 'Transmitter'
+}
+
+function deviceText({address, hello: h}) {
+  return `${h['product-name']} · firmware ${h.version} · ${address}`
+}
+
+/** The chooser's Search again: forget the list and look for devices afresh. */
+function rescan() {
+  choices.value = []
+  connectDevice()
+}
+
 /** Drop the device and the panels, and show the connect panel again. */
 function resetToIdle() {
   session.value = null
@@ -200,13 +263,16 @@ watch(phase, async (p) => {
   }
 })
 
+let unmounted = false
+
 onMounted(async () => {
   window.addEventListener('td-device-rebooting', onRebootAnnounced)
   // ?dashboard&mock=tx|rx (dev): the fixture transport needs no device.
-  if (mockParam) await connectDevice()
+  await autoConnect()
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   window.removeEventListener('td-device-rebooting', onRebootAnnounced)
   if (session.value) session.value.disconnect().catch(() => {})
 })
@@ -235,16 +301,20 @@ onBeforeUnmount(() => {
                   style="white-space: pre-line" closable @click:close="connectError = ''">
             {{ connectError }}
           </VAlert>
-          <VAlert v-else-if="choices.length" type="info" variant="tonal" class="td-dash-connect-alert">
-            More than one device is connected. Which one do you want to configure?
-            <div class="mt-2">
-              <VBtn v-for="c in choices" :key="c.address" class="mr-2" color="primary" variant="tonal"
-                    :loading="connectBusy" @click="connectDevice(c.address)">
-                {{ c.hello['module-type'] }} — {{ c.hello['product-name'] }}
-              </VBtn>
+          <!-- More than one device answered: one card per device, as on the Firmware page. -->
+          <template v-if="choices.length">
+            <p class="td-dash-choose">{{ choices.length }} devices found. Choose the one to configure.</p>
+            <div class="td-dash-choices">
+              <HoverCard v-for="c in choices" :key="c.address" min-height="100%"
+                         :image="deviceIcon(c.hello)" :hover-image="deviceIcon(c.hello)"
+                         :title="deviceTitle(c.hello)" :text="deviceText(c)"
+                         @click="connectDevice(c.address)"/>
             </div>
-          </VAlert>
-          <HoverCard min-height="100%" :interactive="false"
+            <div class="td-dash-rescan">
+              <VBtn variant="text" size="small" :disabled="connectBusy" @click="rescan">Search again</VBtn>
+            </div>
+          </template>
+          <HoverCard v-else min-height="100%" :interactive="false"
                      :image="moduleIcon" :hover-image="moduleIcon"
                      title="USB Device Config"
                      text="Connect a TitanLRS device over USB
@@ -262,10 +332,10 @@ onBeforeUnmount(() => {
     </div>
   </main>
 
-  <!-- Brief gap between connecting and the first panel; no controls, it is not a page. -->
-  <div v-else-if="phase === 'connecting' && !tabs.length" class="td-dash-loading">
+  <!-- The automatic search on opening, then the gap before the first panel; no controls. -->
+  <div v-else-if="phase === 'probing' || (phase === 'connecting' && !tabs.length)" class="td-dash-loading">
     <VProgressCircular indeterminate color="primary" size="28"/>
-    <span>Reading device configuration…</span>
+    <span>{{ phase === 'probing' ? 'Looking for a device…' : 'Reading device configuration…' }}</span>
   </div>
 
   <div v-else class="td-dashboard">
@@ -315,6 +385,23 @@ onBeforeUnmount(() => {
 
 .td-dash-connect-alert {
   margin-bottom: 12px;
+}
+
+.td-dash-choose {
+  margin: 0 0 12px;
+  color: var(--td-fg-mute);
+}
+
+.td-dash-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.td-dash-rescan {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 /* ── Connected shell ────────────────────────────────────────────────────────

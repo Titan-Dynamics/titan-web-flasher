@@ -7,7 +7,8 @@
 # Unified_STM32H743_LR2021_{TX,RX} envs (FCC only), copies the binaries under
 # public/assets/firmware/<version>/FCC/, adds <version> to public/assets/firmware/index.json, and
 # writes the dev-only targets override (public/assets/targets-local/) that src/js/targets.js merges
-# in dev builds. Run ./get_artifacts.sh FIRST: it wipes public/assets/firmware.
+# in dev builds. The layouts are copied from <FW path>/src/hardware (the targets repo checkout), so
+# edits there are what gets flashed. Run ./get_artifacts.sh FIRST: it wipes public/assets/firmware.
 #
 # Extra envs (full PlatformIO names, e.g. Unified_ESP32_LR1121_TX_via_UART) are built too and staged
 # as CI stages them: every .bin of the build under FCC/<env without _via_*>/. Use this to put ESP
@@ -82,10 +83,10 @@ done
 LOCAL="${WF}/public/assets/targets-local"
 mkdir -p "${LOCAL}/TX" "${LOCAL}/RX"
 
-python3 -I - "${WF}/public/assets/firmware/index.json" "${LOCAL}" "${VERSION}" <<'PY'
+python3 -I - "${WF}/public/assets/firmware/index.json" "${LOCAL}" "${VERSION}" "${SRC}/hardware" <<'PY'
 import json, os, sys
 
-index_path, local, version = sys.argv[1], sys.argv[2], sys.argv[3]
+index_path, local, version, hardware = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
 # Firmware index: add the local version alongside whatever get_artifacts.sh staged.
 index = {"tags": {}, "branches": {}}
@@ -145,7 +146,9 @@ for vendor, radios in targets.items():
 with open(targets_path, "w") as f:
     json.dump(merged, f, indent=2)
 
-# Layouts (Part C2). Power levels are POWERMGNT PowerLevels_e: PWR_10mW = 0, PWR_100mW = 3.
+# Layouts: the ones in the firmware checkout's targets repo (src/hardware), so local edits there
+# (LED invert, fan pins, ...) are what gets flashed. The built-in copy below is only a fallback for
+# a checkout without them. Power levels are POWERMGNT PowerLevels_e: PWR_10mW = 0, PWR_100mW = 3.
 tx = {
     "serial_rx": "PB10", "serial_tx": "PB10",
     "radio_nss": "PE0", "radio_sck": "PE12", "radio_miso": "PE13", "radio_mosi": "PE14",
@@ -164,6 +167,13 @@ tx = {
 rx = dict(tx, serial_rx="PB11", serial_tx="PB10")
 for sub, name, layout in (("TX", "TD LR2021 STM32H7 Gemini TX.json", tx),
                           ("RX", "TD LR2021 STM32H7 Gemini RX.json", rx)):
+    source = os.path.join(hardware, sub, name)
+    if os.path.exists(source):
+        with open(source) as f:
+            layout = json.load(f)
+        print(f"   layout:   {sub}/{name} from {source}")
+    else:
+        print(f"⚠️  {source} not found; staging the built-in {sub} layout")
     with open(os.path.join(local, sub, name), "w") as f:
         json.dump(layout, f, indent=2)
 PY

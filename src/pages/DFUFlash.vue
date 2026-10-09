@@ -216,19 +216,12 @@ async function connect() {
       return
     }
 
-    // The running firmware, on its USB network interface. The address says which module type
-    // answered, so look where this firmware's type lives first.
-    const moduleType = files.deviceType === 'TX' || files.deviceType === 'RX' ? files.deviceType : null
-    let found = await discoverDevices({moduleType})
-    if (!found.length && moduleType) {
-      const other = await discoverDevices()
-      if (other.length) {
-        step.value++
-        writeln(`Found a ${other[0].hello['module-type']} module, but this firmware is for an ${moduleType}. Connect the ${moduleType} instead.`)
-        failed.value = true
-        return
-      }
-    }
+    // The running firmware, on its USB network interface. Any TitanLRS device can be flashed with
+    // either module type; when a TX and an RX are both connected, prefer the one already running
+    // this firmware's type so the board the user means is the one that gets flashed.
+    const found = await discoverDevices()
+    const wanted = files.deviceType === 'TX' || files.deviceType === 'RX' ? files.deviceType : null
+    found.sort((a, b) => (b.hello['module-type'] === wanted) - (a.hello['module-type'] === wanted))
     if (found.length) {
       step.value++
       await rebootIntoDfu(found[0])

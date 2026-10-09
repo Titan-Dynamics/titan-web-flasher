@@ -121,6 +121,21 @@ async function probe(address, timeout = PROBE_TIMEOUT_MS) {
 }
 
 /**
+ * This site's Local Network Access permission as a PermissionStatus (`.state` is 'granted',
+ * 'prompt' or 'denied'; `change` events follow it), or null when the browser cannot say (older
+ * Chrome, other browsers). Chrome has named the permission both 'local-network-access' and
+ * 'local-network'; an unrecognised name throws.
+ */
+export async function localNetworkPermission() {
+  for (const name of ['local-network-access', 'local-network']) {
+    try {
+      return await navigator.permissions.query({name})
+    } catch { /* not a permission this browser knows */ }
+  }
+  return null
+}
+
+/**
  * Every TitanLRS device reachable on a USB network link right now, TX first.
  * `moduleType` ('TX' / 'RX') limits the search to that address.
  */
